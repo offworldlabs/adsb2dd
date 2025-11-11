@@ -1,9 +1,5 @@
-import {lla2ecef} from '../src/node/geometry.js';
+import {lla2ecef, norm} from '../src/node/geometry.js';
 import {enuToEcef, calculateDopplerFromVelocity} from '../src/node/doppler.js';
-
-function norm(vec) {
-  return Math.sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
-}
 
 describe('Velocity-Based Doppler', () => {
   describe('ENU to ECEF transformation', () => {
@@ -123,6 +119,69 @@ describe('Velocity-Based Doppler', () => {
 
       expect(doppler).not.toBeNull();
       expect(Math.abs(doppler)).toBeGreaterThan(10);
+    });
+
+    test('returns null when aircraft too close to receiver', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 90
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 0);
+      const ecefRx = lla2ecef(0, 0, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = 0.5;
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).toBeNull();
+    });
+
+    test('returns null for invalid latitude', () => {
+      const aircraft = {
+        lat: 91,
+        lon: 0,
+        gs: 194.384,
+        track: 90
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).toBeNull();
+    });
+
+    test('returns null for invalid longitude', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 181,
+        gs: 194.384,
+        track: 90
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).toBeNull();
     });
   });
 });

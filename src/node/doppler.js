@@ -37,6 +37,15 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
     return null;
   }
 
+  if (dRxTar < 1 || dTxTar < 1) {
+    return null;
+  }
+
+  if (aircraft.lat < -90 || aircraft.lat > 90 ||
+      aircraft.lon < -180 || aircraft.lon > 180) {
+    return null;
+  }
+
   const gs_ms = aircraft.gs * KNOTS_TO_MS;
   const track_rad = aircraft.track * Math.PI / 180;
 
