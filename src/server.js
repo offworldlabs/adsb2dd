@@ -8,7 +8,7 @@ import {isValidNumber} from './node/validate.js';
 
 const app = express();
 app.use(cors());
-const port = 49155;
+const port = process.env.PORT || 3000;
 
 // constants
 var dict = {};
@@ -18,6 +18,82 @@ const tDelete = 30;
 const tDeletePlane = 5;
 const nMaxDelayArray = 10;
 const nDopplerSmooth = 10;
+
+/// @brief Convert ENU velocity to ECEF velocity
+/// @param vel_e East component of velocity (m/s)
+/// @param vel_n North component of velocity (m/s)
+/// @param vel_u Up component of velocity (m/s)
+/// @param lat_rad Latitude in radians
+/// @param lon_rad Longitude in radians
+/// @return ECEF velocity vector {x, y, z}
+function enuToEcef(vel_e, vel_n, vel_u, lat_rad, lon_rad) {
+  const sin_lat = Math.sin(lat_rad);
+  const cos_lat = Math.cos(lat_rad);
+  const sin_lon = Math.sin(lon_rad);
+  const cos_lon = Math.cos(lon_rad);
+
+  const vx = -sin_lon * vel_e - sin_lat * cos_lon * vel_n + cos_lat * cos_lon * vel_u;
+  const vy =  cos_lon * vel_e - sin_lat * sin_lon * vel_n + cos_lat * sin_lon * vel_u;
+  const vz =  cos_lat * vel_n + sin_lat * vel_u;
+
+  return {x: vx, y: vy, z: vz};
+}
+
+/// @brief Calculate bistatic Doppler from velocity data
+/// @param aircraft Aircraft object with gs, track, and optionally geom_rate
+/// @param aircraft_ecef Aircraft position in ECEF
+/// @param ecefRx Receiver position in ECEF
+/// @param ecefTx Transmitter position in ECEF
+/// @param dRxTar Distance from receiver to aircraft (meters)
+/// @param dTxTar Distance from transmitter to aircraft (meters)
+/// @param fc Carrier frequency in MHz
+/// @return Doppler shift in Hz, or null if velocity data unavailable
+function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc) {
+  if (!isValidNumber(aircraft.gs) || !isValidNumber(aircraft.track)) {
+    return null;
+  }
+
+  const gs_ms = aircraft.gs * 0.514444;
+  const track_rad = aircraft.track * Math.PI / 180;
+
+  const vel_east = gs_ms * Math.sin(track_rad);
+  const vel_north = gs_ms * Math.cos(track_rad);
+
+  let vel_up = 0;
+  if (isValidNumber(aircraft.geom_rate)) {
+    vel_up = aircraft.geom_rate * 0.00508;
+  }
+
+  const lat_rad = aircraft.lat * Math.PI / 180;
+  const lon_rad = aircraft.lon * Math.PI / 180;
+  const vel_ecef = enuToEcef(vel_east, vel_north, vel_up, lat_rad, lon_rad);
+
+  const vec_to_rx = {
+    x: (ecefRx.x - aircraft_ecef.x) / dRxTar,
+    y: (ecefRx.y - aircraft_ecef.y) / dRxTar,
+    z: (ecefRx.z - aircraft_ecef.z) / dRxTar
+  };
+
+  const vec_to_tx = {
+    x: (ecefTx.x - aircraft_ecef.x) / dTxTar,
+    y: (ecefTx.y - aircraft_ecef.y) / dTxTar,
+    z: (ecefTx.z - aircraft_ecef.z) / dTxTar
+  };
+
+  const range_rate_rx = vel_ecef.x * vec_to_rx.x +
+                        vel_ecef.y * vec_to_rx.y +
+                        vel_ecef.z * vec_to_rx.z;
+
+  const range_rate_tx = vel_ecef.x * vec_to_tx.x +
+                        vel_ecef.y * vec_to_tx.y +
+                        vel_ecef.z * vec_to_tx.z;
+
+  const bistatic_range_rate = range_rate_rx + range_rate_tx;
+  const wavelength = 299792458 / (fc * 1000000);
+  const doppler = -bistatic_range_rate / wavelength;
+
+  return doppler;
+}
 
 app.use(express.static('public'));
 
@@ -74,8 +150,9 @@ app.get('/api/dd', async (req, res) => {
 
 });
 
-app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+const host = process.env.HOST || '0.0.0.0';
+app.listen(port, host, () => {
+  console.log(`Server is running at http://${host}:${port}`);
 });
 
 /// @brief Main event loop to update dict data.
@@ -180,36 +257,52 @@ function adsb2dd(key, json) {
     dict[key]['proc'][hexCode]['delays'].push(delay);
     dict[key]['proc'][hexCode]['timestamps'].push(json.now + aircraft.seen_pos);
 
-    // bistatic Doppler (Hz)
-    if (dict[key]['proc'][hexCode]['delays'].length >= 2) {
+    // bistatic Doppler (Hz) - try velocity-based method first
+    const doppler_vel = calculateDopplerFromVelocity(
+      aircraft,
+      tar,
+      dict[key]['ecefRx'],
+      dict[key]['ecefTx'],
+      dRxTar,
+      dTxTar,
+      dict[key]['fc']
+    );
 
-      // smoothed derivative using median method
+    let doppler_pos = null;
+    if (dict[key]['proc'][hexCode]['delays'].length >= 2) {
+      // smoothed derivative using median method (position-based)
       const doppler_ms_arr = smoothedDerivativeUsingMedian(
-        dict[key]['proc'][hexCode]['delays'], 
+        dict[key]['proc'][hexCode]['delays'],
         dict[key]['proc'][hexCode]['timestamps'], nDopplerSmooth);
       const doppler_ms = doppler_ms_arr.at(-1);
 
-      // standard derivative (noisy)
-      /*
-      const delta_t = dict[key]['proc'][hexCode]['timestamps'].at(-1)
-        - dict[key]['proc'][hexCode]['timestamps'].at(-2);
-      const diff = dict[key]['proc'][hexCode]['delays'].at(-1)
-        - dict[key]['proc'][hexCode]['delays'].at(-2);
-      const doppler_ms = diff / delta_t;
-      */
-
       // convert Doppler to Hz
-      const doppler = -doppler_ms/(1*(299792458/(dict[key]['fc']*1000000)));
-
-      // output data
-      dict[key]['out'][hexCode]['delay'] = limit_digits(delay/1000, 5)
-      dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler, 5)
+      doppler_pos = -doppler_ms/(1*(299792458/(dict[key]['fc']*1000000)));
 
       // limit max number of storage
       if (dict[key]['proc'][hexCode]['delays'].length >= nMaxDelayArray) {
         dict[key]['proc'][hexCode]['delays'].shift();
         dict[key]['proc'][hexCode]['timestamps'].shift();
       }
+    }
+
+    // output data - use velocity-based if available, otherwise position-based
+    dict[key]['out'][hexCode]['delay'] = limit_digits(delay/1000, 5)
+
+    if (doppler_vel !== null) {
+      dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler_vel, 5);
+      dict[key]['out'][hexCode]['doppler_method'] = 'velocity';
+    } else if (doppler_pos !== null) {
+      dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler_pos, 5);
+      dict[key]['out'][hexCode]['doppler_method'] = 'position';
+    }
+
+    // output both for comparison/debugging
+    if (doppler_vel !== null) {
+      dict[key]['out'][hexCode]['doppler_vel'] = limit_digits(doppler_vel, 5);
+    }
+    if (doppler_pos !== null) {
+      dict[key]['out'][hexCode]['doppler_pos'] = limit_digits(doppler_pos, 5);
     }
 
   }
