@@ -80,13 +80,13 @@ function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, d
     z: (ecefTx.z - aircraft_ecef.z) / dTxTar
   };
 
-  const range_rate_rx = vel_ecef.x * vec_to_rx.x +
-                        vel_ecef.y * vec_to_rx.y +
-                        vel_ecef.z * vec_to_rx.z;
+  const range_rate_rx = -(vel_ecef.x * vec_to_rx.x +
+                          vel_ecef.y * vec_to_rx.y +
+                          vel_ecef.z * vec_to_rx.z);
 
-  const range_rate_tx = vel_ecef.x * vec_to_tx.x +
-                        vel_ecef.y * vec_to_tx.y +
-                        vel_ecef.z * vec_to_tx.z;
+  const range_rate_tx = -(vel_ecef.x * vec_to_tx.x +
+                          vel_ecef.y * vec_to_tx.y +
+                          vel_ecef.z * vec_to_tx.z);
 
   const bistatic_range_rate = range_rate_rx + range_rate_tx;
   const wavelength = 299792458 / (fc * 1000000);
