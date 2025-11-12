@@ -6,11 +6,15 @@
   "author": "github.com/30hours",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "express": "^4.16.1",
     "cors": "^2.8.5",
+    "express": "^4.16.1",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
   }
 }

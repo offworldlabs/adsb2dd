@@ -1,0 +1,13 @@
+{
+  "name": "adsb2dd",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "adsb2dd - ADS-B to delay-Doppler truth converter",
+  "author": "github.com/30hours",
+  "scripts": {
+    "test": "node --experimental-vm-modules src/node_modules/jest/bin/jest.js"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
+  }
+}

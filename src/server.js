@@ -5,10 +5,11 @@ import fetch from 'node-fetch';
 import {checkTar1090, getTar1090} from './node/tar1090.js';
 import {lla2ecef, norm, ft2m} from './node/geometry.js';
 import {isValidNumber} from './node/validate.js';
+import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
 
 const app = express();
 app.use(cors());
-const port = 49155;
+const port = process.env.PORT || 49155;
 
 // constants
 var dict = {};
@@ -38,7 +39,7 @@ app.get('/api/dd', async (req, res) => {
   const rxParams = req.query.rx.split(',').map(parseFloat);
   const txParams = req.query.tx.split(',').map(parseFloat);
   const fc = parseFloat(req.query.fc);
-  if (!server || !rxParams.every(isValidNumber) || !txParams.every(isValidNumber) || isNaN(fc)) {
+  if (!server || !rxParams.every(isValidNumber) || !txParams.every(isValidNumber) || isNaN(fc) || fc <= 0) {
     return res.status(400).json({ error: 'Invalid parameters.' });
   }
   const [rxLat, rxLon, rxAlt] = rxParams;
@@ -74,8 +75,9 @@ app.get('/api/dd', async (req, res) => {
 
 });
 
-app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+const host = process.env.HOST || '0.0.0.0';
+app.listen(port, host, () => {
+  console.log(`Server is running at http://${host}:${port}`);
 });
 
 /// @brief Main event loop to update dict data.
@@ -180,36 +182,53 @@ function adsb2dd(key, json) {
     dict[key]['proc'][hexCode]['delays'].push(delay);
     dict[key]['proc'][hexCode]['timestamps'].push(json.now + aircraft.seen_pos);
 
-    // bistatic Doppler (Hz)
-    if (dict[key]['proc'][hexCode]['delays'].length >= 2) {
+    // bistatic Doppler (Hz) - try velocity-based method first
+    const doppler_vel = calculateDopplerFromVelocity(
+      aircraft,
+      tar,
+      dict[key]['ecefRx'],
+      dict[key]['ecefTx'],
+      dRxTar,
+      dTxTar,
+      dict[key]['fc']
+    );
 
-      // smoothed derivative using median method
+    let doppler_pos = null;
+    if (dict[key]['proc'][hexCode]['delays'].length >= 2) {
+      // smoothed derivative using median method (position-based)
       const doppler_ms_arr = smoothedDerivativeUsingMedian(
-        dict[key]['proc'][hexCode]['delays'], 
+        dict[key]['proc'][hexCode]['delays'],
         dict[key]['proc'][hexCode]['timestamps'], nDopplerSmooth);
       const doppler_ms = doppler_ms_arr.at(-1);
 
-      // standard derivative (noisy)
-      /*
-      const delta_t = dict[key]['proc'][hexCode]['timestamps'].at(-1)
-        - dict[key]['proc'][hexCode]['timestamps'].at(-2);
-      const diff = dict[key]['proc'][hexCode]['delays'].at(-1)
-        - dict[key]['proc'][hexCode]['delays'].at(-2);
-      const doppler_ms = diff / delta_t;
-      */
-
       // convert Doppler to Hz
-      const doppler = -doppler_ms/(1*(299792458/(dict[key]['fc']*1000000)));
-
-      // output data
-      dict[key]['out'][hexCode]['delay'] = limit_digits(delay/1000, 5)
-      dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler, 5)
+      const wavelength = calculateWavelength(dict[key]['fc']);
+      doppler_pos = -doppler_ms / wavelength;
 
       // limit max number of storage
       if (dict[key]['proc'][hexCode]['delays'].length >= nMaxDelayArray) {
         dict[key]['proc'][hexCode]['delays'].shift();
         dict[key]['proc'][hexCode]['timestamps'].shift();
       }
+    }
+
+    // output data - use velocity-based if available, otherwise position-based
+    dict[key]['out'][hexCode]['delay'] = limit_digits(delay/1000, 5)
+
+    if (doppler_vel !== null) {
+      dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler_vel, 5);
+      dict[key]['out'][hexCode]['doppler_method'] = 'velocity';
+    } else if (doppler_pos !== null) {
+      dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler_pos, 5);
+      dict[key]['out'][hexCode]['doppler_method'] = 'position';
+    }
+
+    // output both for comparison/debugging
+    if (doppler_vel !== null) {
+      dict[key]['out'][hexCode]['doppler_vel'] = limit_digits(doppler_vel, 5);
+    }
+    if (doppler_pos !== null) {
+      dict[key]['out'][hexCode]['doppler_pos'] = limit_digits(doppler_pos, 5);
     }
 
   }
