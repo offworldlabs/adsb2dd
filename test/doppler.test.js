@@ -269,5 +269,69 @@ describe('Velocity-Based Doppler', () => {
 
       expect(doppler).toBeNull();
     });
+
+    test('handles track near 360 degrees correctly', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 359.9
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0.1, 0, 0);
+      const ecefTx = lla2ecef(-0.1, 0, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).not.toBeNull();
+    });
+
+    test('returns null for track >= 360 degrees', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 360
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).toBeNull();
+    });
+
+    test('handles negative vertical rate correctly', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 90,
+        geom_rate: -3000
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).not.toBeNull();
+    });
   });
 });

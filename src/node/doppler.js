@@ -1,12 +1,19 @@
-const KNOTS_TO_MS = 0.514444;
-const FTMIN_TO_MS = 0.00508;
-const SPEED_OF_LIGHT = 299792458;
-const MHZ_TO_HZ = 1e6;
-const MIN_VALID_DISTANCE = 100;
-const MAX_GROUND_SPEED = 1000;
-const MAX_VERTICAL_RATE = 20000;
-const MIN_ALTITUDE = -1000;
-const MAX_ALTITUDE = 100000;
+export const KNOTS_TO_MS = 0.514444;
+export const FTMIN_TO_MS = 0.00508;
+export const SPEED_OF_LIGHT = 299792458;
+export const MHZ_TO_HZ = 1e6;
+export const MIN_VALID_DISTANCE_M = 100;
+export const MAX_GROUND_SPEED_KNOTS = 1000;
+export const MAX_VERTICAL_RATE_FTMIN = 20000;
+export const MIN_ALTITUDE_FT = -1000;
+export const MAX_ALTITUDE_FT = 100000;
+
+/// @brief Calculate wavelength from frequency
+/// @param fc Carrier frequency in MHz
+/// @return Wavelength in meters
+export function calculateWavelength(fc) {
+  return SPEED_OF_LIGHT / (fc * MHZ_TO_HZ);
+}
 
 /// @brief Convert ENU velocity to ECEF velocity
 /// @param vel_e East component of velocity (m/s)
@@ -43,11 +50,15 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
     return null;
   }
 
-  if (aircraft.gs < 0 || aircraft.gs > MAX_GROUND_SPEED) {
+  if (aircraft.gs < 0 || aircraft.gs > MAX_GROUND_SPEED_KNOTS) {
     return null;
   }
 
-  if (dRxTar < MIN_VALID_DISTANCE || dTxTar < MIN_VALID_DISTANCE) {
+  if (aircraft.track < 0 || aircraft.track >= 360) {
+    return null;
+  }
+
+  if (dRxTar < MIN_VALID_DISTANCE_M || dTxTar < MIN_VALID_DISTANCE_M) {
     return null;
   }
 
@@ -57,12 +68,12 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
   }
 
   if (aircraft.alt_geom !== undefined &&
-      (aircraft.alt_geom < MIN_ALTITUDE || aircraft.alt_geom > MAX_ALTITUDE)) {
+      (aircraft.alt_geom < MIN_ALTITUDE_FT || aircraft.alt_geom > MAX_ALTITUDE_FT)) {
     return null;
   }
 
   if (aircraft.geom_rate !== undefined && !isNaN(aircraft.geom_rate) &&
-      Math.abs(aircraft.geom_rate) > MAX_VERTICAL_RATE) {
+      Math.abs(aircraft.geom_rate) > MAX_VERTICAL_RATE_FTMIN) {
     return null;
   }
 
@@ -102,7 +113,7 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
                           vel_ecef.z * vec_to_tx.z);
 
   const bistatic_range_rate = range_rate_rx + range_rate_tx;
-  const wavelength = SPEED_OF_LIGHT / (fc * MHZ_TO_HZ);
+  const wavelength = calculateWavelength(fc);
   const doppler = -bistatic_range_rate / wavelength;
 
   return doppler;

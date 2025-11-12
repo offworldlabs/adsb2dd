@@ -5,7 +5,7 @@ import fetch from 'node-fetch';
 import {checkTar1090, getTar1090} from './node/tar1090.js';
 import {lla2ecef, norm, ft2m} from './node/geometry.js';
 import {isValidNumber} from './node/validate.js';
-import {calculateDopplerFromVelocity} from './node/doppler.js';
+import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
 
 const app = express();
 app.use(cors());
@@ -202,7 +202,8 @@ function adsb2dd(key, json) {
       const doppler_ms = doppler_ms_arr.at(-1);
 
       // convert Doppler to Hz
-      doppler_pos = -doppler_ms/(1*(299792458/(dict[key]['fc']*1000000)));
+      const wavelength = calculateWavelength(dict[key]['fc']);
+      doppler_pos = -doppler_ms / wavelength;
 
       // limit max number of storage
       if (dict[key]['proc'][hexCode]['delays'].length >= nMaxDelayArray) {
