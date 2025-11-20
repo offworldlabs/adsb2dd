@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import fetch from 'node-fetch';
 
 import {checkTar1090, getTar1090} from './node/tar1090.js';
 import {lla2ecef, norm, ft2m} from './node/geometry.js';
@@ -36,11 +35,11 @@ app.get('/api/dd', async (req, res) => {
     
   // extract and validate parameters
   const server = req.query.server;
-  const rxParams = req.query.rx.split(',').map(parseFloat);
-  const txParams = req.query.tx.split(',').map(parseFloat);
+  const rxParams = req.query.rx?.split(',').map(parseFloat);
+  const txParams = req.query.tx?.split(',').map(parseFloat);
   const fc = parseFloat(req.query.fc);
-  if (!server || !rxParams.every(isValidNumber) || !txParams.every(isValidNumber) || isNaN(fc) || fc <= 0) {
-    return res.status(400).json({ error: 'Invalid parameters.' });
+  if (!server || !rxParams || !txParams || !rxParams.every(isValidNumber) || !txParams.every(isValidNumber) || isNaN(fc) || fc <= 0) {
+    return res.status(400).json({ error: 'Invalid parameters. Required: server, rx, tx, fc' });
   }
   const [rxLat, rxLon, rxAlt] = rxParams;
   const [txLat, txLon, txAlt] = txParams;
@@ -93,6 +92,11 @@ const process_adsb2dd = async () => {
 
     // get latest JSON from server
     var json = await getTar1090(dict[key]['apiUrl']);
+
+    // skip if fetch failed or invalid response
+    if (!json || !json.aircraft || !Array.isArray(json.aircraft)) {
+      continue;
+    }
 
     // check that ADS-B data has updated
     if (json.now === dict[key]['timestamp']) {
