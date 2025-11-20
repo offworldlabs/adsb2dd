@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 
 import {checkTar1090, getTar1090} from './node/tar1090.js';
+import {checkAdsbLol, getAdsbLol} from './node/adsblol.js';
 import {lla2ecef, norm, ft2m} from './node/geometry.js';
 import {isValidNumber} from './node/validate.js';
 import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
@@ -18,6 +19,7 @@ const tDelete = 30;
 const tDeletePlane = 5;
 const nMaxDelayArray = 10;
 const nDopplerSmooth = 10;
+const adsbLolRadius = 40;
 
 app.use(express.static('public'));
 
@@ -43,10 +45,19 @@ app.get('/api/dd', async (req, res) => {
   }
   const [rxLat, rxLon, rxAlt] = rxParams;
   const [txLat, txLon, txAlt] = txParams;
-  const apiUrl = server + '/data/aircraft.json';
 
-  // add new entry to dict
-  const isServerValid = await checkTar1090(apiUrl);
+  const isAdsbLol = server === 'https://api.adsb.lol';
+  let isServerValid;
+
+  if (isAdsbLol) {
+    const midLat = (rxLat + txLat) / 2;
+    const midLon = (rxLon + txLon) / 2;
+    isServerValid = await checkAdsbLol(midLat, midLon, adsbLolRadius);
+  } else {
+    const apiUrl = server + '/data/aircraft.json';
+    isServerValid = await checkTar1090(apiUrl);
+  }
+
   if (isServerValid) {
     dict[req.originalUrl] = {};
     dict[req.originalUrl]['rxLat'] = rxLat;
@@ -57,7 +68,13 @@ app.get('/api/dd', async (req, res) => {
     dict[req.originalUrl]['txAlt'] = txAlt;
     dict[req.originalUrl]['fc'] = fc;
     dict[req.originalUrl]['server'] = server;
-    dict[req.originalUrl]['apiUrl'] = apiUrl;
+    dict[req.originalUrl]['isAdsbLol'] = isAdsbLol;
+    if (isAdsbLol) {
+      dict[req.originalUrl]['midLat'] = (rxLat + txLat) / 2;
+      dict[req.originalUrl]['midLon'] = (rxLon + txLon) / 2;
+    } else {
+      dict[req.originalUrl]['apiUrl'] = server + '/data/aircraft.json';
+    }
     dict[req.originalUrl]['out'] = {};
     dict[req.originalUrl]['timestamp'] = Date.now()/1000;
     dict[req.originalUrl]['proc'] = {};
@@ -65,11 +82,11 @@ app.get('/api/dd', async (req, res) => {
     const ecefTx = lla2ecef(txLat, txLon, txAlt);
     dict[req.originalUrl]['ecefRx'] = ecefRx;
     dict[req.originalUrl]['ecefTx'] = ecefTx;
-    dict[req.originalUrl]['dRxTx'] = norm([ecefRx.x - ecefTx.x, 
+    dict[req.originalUrl]['dRxTx'] = norm([ecefRx.x - ecefTx.x,
       ecefRx.y - ecefTx.y, ecefRx.z - ecefTx.z]);
     return res.json(dict[req.originalUrl]['out']);
   } else {
-    return res.status(500).json({ error: 'Error checking tar1090 validity.' });
+    return res.status(500).json({ error: 'Error checking data source validity.' });
   }
 
 });
@@ -91,7 +108,12 @@ const process_adsb2dd = async () => {
   for (const [key, value] of Object.entries(dict)) {
 
     // get latest JSON from server
-    var json = await getTar1090(dict[key]['apiUrl']);
+    let json;
+    if (dict[key]['isAdsbLol']) {
+      json = await getAdsbLol(dict[key]['midLat'], dict[key]['midLon'], adsbLolRadius);
+    } else {
+      json = await getTar1090(dict[key]['apiUrl']);
+    }
 
     // skip if fetch failed or invalid response
     if (!json || !json.aircraft || !Array.isArray(json.aircraft)) {
