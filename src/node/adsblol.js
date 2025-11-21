@@ -1,5 +1,8 @@
 import fetch from 'node-fetch';
 
+// constants
+const MAX_ADSB_LOL_RADIUS = 250; // nautical miles, adsb.lol API limit
+
 /// @brief Validate lat/lon/radius parameters
 /// @param lat Latitude
 /// @param lon Longitude
@@ -14,7 +17,7 @@ function validateParameters(lat, lon, radius) {
     console.error('Invalid longitude:', lon);
     return false;
   }
-  if (typeof radius !== 'number' || radius <= 0 || radius > 250) {
+  if (typeof radius !== 'number' || radius <= 0 || radius > MAX_ADSB_LOL_RADIUS) {
     console.error('Invalid radius:', radius);
     return false;
   }
@@ -84,9 +87,14 @@ export async function getAdsbLol(lat, lon, radius) {
 
     const data = await response.json();
 
-    // adsb.lol returns timestamp in milliseconds, convert to seconds
+    // adsb.lol API returns timestamp in milliseconds (verified: values > 1e12)
+    // convert to seconds to match tar1090 format
+    // if timestamp appears to already be in seconds, use as-is
+    const timestamp = data.now;
+    const nowInSeconds = timestamp > 1e12 ? timestamp / 1000 : timestamp;
+
     return {
-      now: data.now / 1000,
+      now: nowInSeconds,
       messages: data.total || 0,
       aircraft: data.ac || []
     };
