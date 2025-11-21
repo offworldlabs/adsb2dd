@@ -85,7 +85,7 @@ app.get('/api/dd', async (req, res) => {
     midLon = (rxLon + txLon) / 2;
     isServerValid = await checkAdsbLol(midLat, midLon, adsbLolRadius);
   } else {
-    const apiUrl = server + '/data/aircraft.json';
+    const apiUrl = new URL('/data/aircraft.json', server).href;
     isServerValid = await checkTar1090(apiUrl);
   }
 
@@ -104,7 +104,7 @@ app.get('/api/dd', async (req, res) => {
       dict[req.originalUrl]['midLat'] = midLat;
       dict[req.originalUrl]['midLon'] = midLon;
     } else {
-      dict[req.originalUrl]['apiUrl'] = server + '/data/aircraft.json';
+      dict[req.originalUrl]['apiUrl'] = new URL('/data/aircraft.json', server).href;
     }
     dict[req.originalUrl]['out'] = {};
     dict[req.originalUrl]['timestamp'] = Date.now()/1000;
