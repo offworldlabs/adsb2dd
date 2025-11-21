@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 /// @brief Check that the adsb.lol API is valid and active.
 /// @param lat Latitude of query center.
 /// @param lon Longitude of query center.
@@ -48,6 +50,10 @@ export async function getAdsbLol(lat, lon, radius) {
     };
   } catch (error) {
     console.error('Error:', error.message);
-    return false;
+    return {
+      now: Date.now() / 1000,
+      messages: 0,
+      aircraft: []
+    };
   }
 }

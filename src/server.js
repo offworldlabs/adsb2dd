@@ -19,7 +19,7 @@ const tDelete = 30;
 const tDeletePlane = 5;
 const nMaxDelayArray = 10;
 const nDopplerSmooth = 10;
-const adsbLolRadius = 40;
+const adsbLolRadius = 40; // nautical miles, as specified in issue #4
 
 app.use(express.static('public'));
 
@@ -48,10 +48,11 @@ app.get('/api/dd', async (req, res) => {
 
   const isAdsbLol = server === 'https://api.adsb.lol';
   let isServerValid;
+  let midLat, midLon;
 
   if (isAdsbLol) {
-    const midLat = (rxLat + txLat) / 2;
-    const midLon = (rxLon + txLon) / 2;
+    midLat = (rxLat + txLat) / 2;
+    midLon = (rxLon + txLon) / 2;
     isServerValid = await checkAdsbLol(midLat, midLon, adsbLolRadius);
   } else {
     const apiUrl = server + '/data/aircraft.json';
@@ -70,8 +71,8 @@ app.get('/api/dd', async (req, res) => {
     dict[req.originalUrl]['server'] = server;
     dict[req.originalUrl]['isAdsbLol'] = isAdsbLol;
     if (isAdsbLol) {
-      dict[req.originalUrl]['midLat'] = (rxLat + txLat) / 2;
-      dict[req.originalUrl]['midLon'] = (rxLon + txLon) / 2;
+      dict[req.originalUrl]['midLat'] = midLat;
+      dict[req.originalUrl]['midLon'] = midLon;
     } else {
       dict[req.originalUrl]['apiUrl'] = server + '/data/aircraft.json';
     }
