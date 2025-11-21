@@ -49,7 +49,11 @@ export async function getTar1090(apiUrl) {
     return data;
   } catch (error) {
     console.error('Error:', error.message);
-    return false;
+    return {
+      now: Date.now() / 1000,
+      messages: 0,
+      aircraft: []
+    };
   }
 }
 

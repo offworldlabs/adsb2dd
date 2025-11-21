@@ -87,11 +87,25 @@ export async function getAdsbLol(lat, lon, radius) {
 
     const data = await response.json();
 
-    // adsb.lol API returns timestamp in milliseconds (verified: values > 1e12)
+    // adsb.lol API returns timestamp in milliseconds
     // convert to seconds to match tar1090 format
-    // if timestamp appears to already be in seconds, use as-is
+    // validate timestamp is within reasonable range (±1 year from current time)
     const timestamp = data.now;
-    const nowInSeconds = timestamp > 1e12 ? timestamp / 1000 : timestamp;
+    const currentTime = Date.now() / 1000;
+    const oneYearSeconds = 365 * 24 * 60 * 60;
+
+    let nowInSeconds;
+    if (timestamp > 1e12) {
+      // appears to be milliseconds, convert to seconds
+      nowInSeconds = timestamp / 1000;
+    } else if (timestamp >= currentTime - oneYearSeconds && timestamp <= currentTime + oneYearSeconds) {
+      // appears to be seconds and within reasonable range
+      nowInSeconds = timestamp;
+    } else {
+      // invalid timestamp, use current time
+      console.error('Invalid timestamp:', timestamp);
+      nowInSeconds = currentTime;
+    }
 
     return {
       now: nowInSeconds,
