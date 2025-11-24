@@ -163,16 +163,10 @@ const process_adsb2dd = async () => {
       continue;
     }
 
-    // check that ADS-B data has updated
-    // both json.now and dict timestamp are in seconds (not milliseconds)
-    if (json.now === dict[key]['timestamp']) {
-      continue;
-    }
-
     // core processing
     adsb2dd(key, json);
 
-    // Update the timestamp to prevent reprocessing the same data
+    // Update the timestamp for tracking
     dict[key]['timestamp'] = json.now;
 
     // remove key after inactivity
