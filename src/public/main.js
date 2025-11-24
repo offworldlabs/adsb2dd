@@ -88,18 +88,5 @@
     if (url) {
       window.open(url, '_blank'); // Open in a new tab or window
     }
-
-    // create an anchor element
-	  /*
-    var linkElement = document.createElement('a');
-    linkElement.href = url;
-    linkElement.target = '_blank'; // Open in a new tab or window
-    linkElement.textContent = url;
-
-    // clear the previous content and append the link
-    var generatedUrlElement = document.getElementById('generatedUrl');
-    generatedUrlElement.innerHTML = '';
-    generatedUrlElement.appendChild(linkElement);
-    */
   }
 

@@ -55,6 +55,10 @@ app.get('/api/dd', async (req, res) => {
   }
 
   // validate server URL to prevent SSRF attacks
+  // Note: This validates hostnames but does not perform DNS resolution.
+  // For internet-facing deployments, consider adding DNS resolution checks
+  // to prevent DNS rebinding attacks where a domain initially resolves to
+  // a public IP but later changes to point to private infrastructure.
   if (!isAdsbLol) {
     try {
       const serverUrl = new URL(server);

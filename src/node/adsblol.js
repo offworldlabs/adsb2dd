@@ -95,7 +95,7 @@ export async function getAdsbLol(lat, lon, radius) {
     const currentTime = Date.now() / 1000;
     const oneYear = 365 * 24 * 60 * 60;
     if (nowInSeconds < currentTime - oneYear || nowInSeconds > currentTime + oneYear) {
-      console.error('Timestamp out of range:', timestamp);
+      throw new Error(`Timestamp out of reasonable range: ${timestamp}`);
     }
 
     return {
