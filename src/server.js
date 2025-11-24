@@ -46,51 +46,57 @@ app.get('/api/dd', async (req, res) => {
   const [rxLat, rxLon, rxAlt] = rxParams;
   const [txLat, txLon, txAlt] = txParams;
 
-  let isAdsbLol = false;
+  // Always validate URL format first
+  let serverUrl;
   try {
-    const serverUrl = new URL(server);
-    isAdsbLol = serverUrl.hostname === 'api.adsb.lol';
+    serverUrl = new URL(server);
   } catch (e) {
     return res.status(400).json({ error: 'Invalid server URL format' });
   }
 
-  // validate server URL to prevent SSRF attacks
+  // validate protocol
+  if (!['http:', 'https:'].includes(serverUrl.protocol)) {
+    return res.status(400).json({ error: 'Server URL must use http or https protocol' });
+  }
+
+  // check if this is adsb.lol
+  const isAdsbLol = serverUrl.hostname === 'api.adsb.lol';
+
+  // For adsb.lol, verify it's exactly the expected domain
+  if (isAdsbLol) {
+    if (server !== 'https://api.adsb.lol') {
+      return res.status(400).json({ error: 'Invalid adsb.lol URL' });
+    }
+  }
+
+  // validate server URL to prevent SSRF attacks for non-adsb.lol servers
   // Note: This validates hostnames but does not perform DNS resolution.
   // For internet-facing deployments, consider adding DNS resolution checks
   // to prevent DNS rebinding attacks where a domain initially resolves to
   // a public IP but later changes to point to private infrastructure.
   if (!isAdsbLol) {
-    try {
-      const serverUrl = new URL(server);
-      // block private IP ranges and localhost
-      const hostname = serverUrl.hostname;
-      const privateRanges = [
-        /^127\./,
-        /^10\./,
-        /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-        /^192\.168\./,
-        /^169\.254\./,
-        /^0\.0\.0\.0$/,
-        /^::1$/,
-        /^::ffff:127\./,
-        /^fe80:/,
-        /^fc00:/,
-        /^fd00:/,
-        /localhost/i
-      ];
-      if (privateRanges.some(range => range.test(hostname))) {
-        return res.status(400).json({ error: 'Server URL points to private network' });
-      }
-      // block dotless decimal notation (e.g., 2130706433 = 127.0.0.1)
-      if (/^\d+$/.test(hostname)) {
-        return res.status(400).json({ error: 'Server URL uses invalid IP format' });
-      }
-      // only allow http and https
-      if (!['http:', 'https:'].includes(serverUrl.protocol)) {
-        return res.status(400).json({ error: 'Server URL must use http or https protocol' });
-      }
-    } catch (e) {
-      return res.status(400).json({ error: 'Invalid server URL format' });
+    // block private IP ranges and localhost
+    const hostname = serverUrl.hostname;
+    const privateRanges = [
+      /^127\./,
+      /^10\./,
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+      /^192\.168\./,
+      /^169\.254\./,
+      /^0\.0\.0\.0$/,
+      /^::1$/,
+      /^::ffff:127\./,
+      /^fe80:/,
+      /^fc00:/,
+      /^fd00:/,
+      /localhost/i
+    ];
+    if (privateRanges.some(range => range.test(hostname))) {
+      return res.status(400).json({ error: 'Server URL points to private network' });
+    }
+    // block dotless decimal notation (e.g., 2130706433 = 127.0.0.1)
+    if (/^\d+$/.test(hostname)) {
+      return res.status(400).json({ error: 'Server URL uses invalid IP format' });
     }
   }
   let isServerValid;
@@ -99,6 +105,10 @@ app.get('/api/dd', async (req, res) => {
   if (isAdsbLol) {
     midLat = (rxLat + txLat) / 2;
     midLon = (rxLon + txLon) / 2;
+    // validate calculated midpoint coordinates
+    if (isNaN(midLat) || isNaN(midLon)) {
+      return res.status(400).json({ error: 'Invalid coordinates' });
+    }
     isServerValid = await checkAdsbLol(midLat, midLon, adsbLolRadius);
   } else {
     const apiUrl = new URL('/data/aircraft.json', server).href;
@@ -170,11 +180,8 @@ const process_adsb2dd = async () => {
     // core processing
     adsb2dd(key, json);
 
-    // Update the timestamp for tracking
-    dict[key]['timestamp'] = json.now;
-
-    // remove key after inactivity
-    if (Date.now()/1000-dict[key]['out']['timestamp'] > tDelete) {
+    // remove key after inactivity (user hasn't accessed API for tDelete seconds)
+    if (Date.now()/1000 - dict[key]['timestamp'] > tDelete) {
       delete(dict[key]);
     }
 
