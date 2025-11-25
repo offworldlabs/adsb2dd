@@ -22,6 +22,7 @@ const tUpdate = 1000;
 const nApiMax = 10;
 const tDelete = 30;
 const tDeletePlane = 5;
+const tMaxStaleness = 10; // seconds, force reprocessing if data timestamp unchanged for this long
 const nMaxDelayArray = 10;
 const nDopplerSmooth = 10;
 const adsbLolRadius = 40; // nautical miles, as specified in issue #4
@@ -243,6 +244,7 @@ app.get('/api/dd', async (req, res) => {
     dict[req.originalUrl]['out'] = {};
     dict[req.originalUrl]['timestamp'] = Date.now()/1000;
     dict[req.originalUrl]['lastProcessed'] = 0;
+    dict[req.originalUrl]['lastProcessedTime'] = 0;
     dict[req.originalUrl]['proc'] = {};
     const ecefRx = lla2ecef(rxLat, rxLon, rxAlt);
     const ecefTx = lla2ecef(txLat, txLon, txAlt);
@@ -287,15 +289,19 @@ const process_adsb2dd = async () => {
     }
 
     // skip if data hasn't been updated since last processing
-    if (json.now === dict[key]['lastProcessed']) {
+    // BUT reprocess if data is stale (timestamp unchanged for too long)
+    const currentTime = Date.now() / 1000;
+    const timeSinceProcessed = currentTime - dict[key]['lastProcessedTime'];
+    if (json.now === dict[key]['lastProcessed'] && timeSinceProcessed < tMaxStaleness) {
       continue;
     }
 
     // core processing
     adsb2dd(key, json);
 
-    // update last processed timestamp
+    // update last processed timestamp and time
     dict[key]['lastProcessed'] = json.now;
+    dict[key]['lastProcessedTime'] = currentTime;
 
     // remove key after inactivity (user hasn't accessed API for tDelete seconds)
     if (Date.now()/1000 - dict[key]['timestamp'] > tDelete) {
