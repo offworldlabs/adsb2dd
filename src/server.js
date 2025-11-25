@@ -1,11 +1,16 @@
 import express from 'express';
 import cors from 'cors';
+import dns from 'dns';
+import { promisify } from 'util';
 
 import {checkTar1090, getTar1090} from './node/tar1090.js';
 import {checkAdsbLol, getAdsbLol} from './node/adsblol.js';
 import {lla2ecef, norm, ft2m} from './node/geometry.js';
 import {isValidNumber} from './node/validate.js';
 import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
+
+const resolve4 = promisify(dns.resolve4);
+const resolve6 = promisify(dns.resolve6);
 
 const app = express();
 app.use(cors());
@@ -22,6 +27,51 @@ const nDopplerSmooth = 10;
 const adsbLolRadius = 40; // nautical miles, as specified in issue #4
 
 app.use(express.static('public'));
+
+/// @brief Check if an IP address is in a private or reserved range
+/// @param ip IP address string (IPv4 or IPv6)
+/// @return True if IP is private/reserved
+function isPrivateIP(ip) {
+  // IPv4 private ranges
+  const ipv4PrivateRanges = [
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^0\.0\.0\.0$/,
+  ];
+
+  // IPv6 private ranges
+  const ipv6PrivateRanges = [
+    /^::1$/,           // loopback
+    /^fe80:/i,         // link-local
+    /^fc00:/i,         // unique local
+    /^fd00:/i,         // unique local
+    /^ff00:/i,         // multicast
+    /^::ffff:/i,       // IPv4-mapped
+  ];
+
+  // Check IPv4
+  if (ipv4PrivateRanges.some(range => range.test(ip))) {
+    return true;
+  }
+
+  // Check IPv6
+  if (ipv6PrivateRanges.some(range => range.test(ip))) {
+    return true;
+  }
+
+  // Check if IPv4-mapped IPv6 points to private IPv4
+  if (/^::ffff:/i.test(ip)) {
+    const ipv4Part = ip.replace(/^::ffff:/i, '');
+    if (ipv4PrivateRanges.some(range => range.test(ipv4Part))) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 app.get('/api/dd', async (req, res) => {
 
@@ -121,6 +171,41 @@ app.get('/api/dd', async (req, res) => {
     // decimal: 2130706433, hex: 0x7f000001, octal: 017700000001
     if (/^(0x[0-9a-f]+|\d+|0[0-7]+)$/i.test(hostname)) {
       return res.status(400).json({ error: 'Server URL uses invalid IP format' });
+    }
+
+    // DNS resolution validation to prevent DNS rebinding attacks
+    // This checks the actual IP addresses the hostname resolves to
+    if (!/^[\d.:]+$/.test(hostname)) {  // only resolve domain names, not IPs
+      try {
+        // resolve both IPv4 and IPv6
+        const resolutions = await Promise.allSettled([
+          resolve4(hostname),
+          resolve6(hostname)
+        ]);
+
+        // collect all resolved IPs
+        const resolvedIPs = [];
+        for (const result of resolutions) {
+          if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+            resolvedIPs.push(...result.value);
+          }
+        }
+
+        // if no IPs resolved, reject (DNS might be failing)
+        if (resolvedIPs.length === 0) {
+          return res.status(400).json({ error: 'Unable to resolve server hostname' });
+        }
+
+        // check if any resolved IP is private
+        for (const ip of resolvedIPs) {
+          if (isPrivateIP(ip)) {
+            return res.status(400).json({ error: 'Server hostname resolves to private network' });
+          }
+        }
+      } catch (error) {
+        // DNS resolution failed - reject for safety
+        return res.status(400).json({ error: 'Unable to resolve server hostname' });
+      }
     }
   }
   let isServerValid;
