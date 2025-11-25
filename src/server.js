@@ -75,27 +75,51 @@ app.get('/api/dd', async (req, res) => {
   // to prevent DNS rebinding attacks where a domain initially resolves to
   // a public IP but later changes to point to private infrastructure.
   if (!isAdsbLol) {
-    // block private IP ranges and localhost
     const hostname = serverUrl.hostname;
-    const privateRanges = [
+
+    // block private IPv4 ranges and localhost
+    const privateIPv4Ranges = [
       /^127\./,
       /^10\./,
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
       /^192\.168\./,
       /^169\.254\./,
       /^0\.0\.0\.0$/,
-      /^::1$/,
-      /^::ffff:127\./,
-      /^fe80:/,
-      /^fc00:/,
-      /^fd00:/,
       /localhost/i
     ];
-    if (privateRanges.some(range => range.test(hostname))) {
+
+    // block private IPv6 ranges and localhost
+    const privateIPv6Ranges = [
+      /^::1$/,           // IPv6 loopback
+      /^fe80:/i,         // link-local
+      /^fc00:/i,         // unique local (fc00::/7)
+      /^fd00:/i,         // unique local
+      /^ff00:/i,         // multicast
+      /^::/,             // unspecified or IPv4-mapped if followed by ffff
+    ];
+
+    // block IPv4-mapped IPv6 addresses pointing to private ranges
+    // format: ::ffff:x.x.x.x or ::ffff:xxxx:xxxx
+    if (/^::ffff:/i.test(hostname)) {
+      const ipv4Part = hostname.replace(/^::ffff:/i, '');
+      if (privateIPv4Ranges.some(range => range.test(ipv4Part))) {
+        return res.status(400).json({ error: 'Server URL points to private network' });
+      }
+    }
+
+    // check IPv4 ranges
+    if (privateIPv4Ranges.some(range => range.test(hostname))) {
       return res.status(400).json({ error: 'Server URL points to private network' });
     }
-    // block dotless decimal notation (e.g., 2130706433 = 127.0.0.1)
-    if (/^\d+$/.test(hostname)) {
+
+    // check IPv6 ranges
+    if (privateIPv6Ranges.some(range => range.test(hostname))) {
+      return res.status(400).json({ error: 'Server URL points to private network' });
+    }
+
+    // block numeric IP formats (decimal, hex, octal)
+    // decimal: 2130706433, hex: 0x7f000001, octal: 017700000001
+    if (/^(0x[0-9a-f]+|\d+|0[0-7]+)$/i.test(hostname)) {
       return res.status(400).json({ error: 'Server URL uses invalid IP format' });
     }
   }
