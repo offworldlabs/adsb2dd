@@ -120,10 +120,9 @@ app.get('/api/dd', async (req, res) => {
   }
 
   // validate server URL to prevent SSRF attacks for non-adsb.lol servers
-  // Note: This validates hostnames but does not perform DNS resolution.
-  // For internet-facing deployments, consider adding DNS resolution checks
-  // to prevent DNS rebinding attacks where a domain initially resolves to
-  // a public IP but later changes to point to private infrastructure.
+  // Multi-layered protection:
+  // 1. Hostname string validation (blocks known private patterns)
+  // 2. DNS resolution validation (prevents DNS rebinding attacks)
   if (!isAdsbLol) {
     const hostname = serverUrl.hostname;
 
@@ -141,11 +140,11 @@ app.get('/api/dd', async (req, res) => {
     // block private IPv6 ranges and localhost
     const privateIPv6Ranges = [
       /^::1$/,           // IPv6 loopback
+      /^::$/,            // unspecified address
       /^fe80:/i,         // link-local
       /^fc00:/i,         // unique local (fc00::/7)
       /^fd00:/i,         // unique local
       /^ff00:/i,         // multicast
-      /^::/,             // unspecified or IPv4-mapped if followed by ffff
     ];
 
     // block IPv4-mapped IPv6 addresses pointing to private ranges
