@@ -22,7 +22,11 @@ export async function checkTar1090(apiUrl) {
       return false;
     }
   } catch (error) {
-    console.error('Error:', error.message);
+    if (error.name === 'AbortError') {
+      console.error('Request timeout checking tar1090 server');
+    } else {
+      console.error('Error checking tar1090:', error.message);
+    }
     return false;
   } finally {
     clearTimeout(timeout);
@@ -46,7 +50,11 @@ export async function getTar1090(apiUrl) {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error:', error.message);
+    if (error.name === 'AbortError') {
+      console.error('Request timeout fetching tar1090 data');
+    } else {
+      console.error('Error fetching tar1090:', error.message);
+    }
     return {
       now: Date.now() / 1000,
       messages: 0,

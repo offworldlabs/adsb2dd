@@ -62,9 +62,9 @@ app.get('/api/dd', async (req, res) => {
   // check if this is adsb.lol
   const isAdsbLol = serverUrl.hostname === 'api.adsb.lol';
 
-  // For adsb.lol, verify it's exactly the expected domain
+  // For adsb.lol, verify it's exactly the expected domain and uses HTTPS
   if (isAdsbLol) {
-    if (server !== 'https://api.adsb.lol') {
+    if (server !== 'https://api.adsb.lol' || serverUrl.protocol !== 'https:') {
       return res.status(400).json({ error: 'Invalid adsb.lol URL' });
     }
   }
@@ -134,6 +134,7 @@ app.get('/api/dd', async (req, res) => {
     }
     dict[req.originalUrl]['out'] = {};
     dict[req.originalUrl]['timestamp'] = Date.now()/1000;
+    dict[req.originalUrl]['lastProcessed'] = 0;
     dict[req.originalUrl]['proc'] = {};
     const ecefRx = lla2ecef(rxLat, rxLon, rxAlt);
     const ecefTx = lla2ecef(txLat, txLon, txAlt);
@@ -177,8 +178,16 @@ const process_adsb2dd = async () => {
       continue;
     }
 
+    // skip if data hasn't been updated since last processing
+    if (json.now === dict[key]['lastProcessed']) {
+      continue;
+    }
+
     // core processing
     adsb2dd(key, json);
+
+    // update last processed timestamp
+    dict[key]['lastProcessed'] = json.now;
 
     // remove key after inactivity (user hasn't accessed API for tDelete seconds)
     if (Date.now()/1000 - dict[key]['timestamp'] > tDelete) {

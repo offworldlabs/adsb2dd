@@ -54,7 +54,11 @@ export async function checkAdsbLol(lat, lon, radius) {
       return false;
     }
   } catch (error) {
-    console.error('Error:', error.message);
+    if (error.name === 'AbortError') {
+      console.error('Request timeout checking adsb.lol API');
+    } else {
+      console.error('Error checking adsb.lol:', error.message);
+    }
     return false;
   } finally {
     clearTimeout(timeout);
@@ -94,7 +98,7 @@ export async function getAdsbLol(lat, lon, radius) {
     // validate result is within reasonable range (±1 year)
     const currentTime = Date.now() / 1000;
     const oneYear = 365 * 24 * 60 * 60;
-    if (nowInSeconds < currentTime - oneYear || nowInSeconds > currentTime + oneYear) {
+    if (Math.abs(nowInSeconds - currentTime) > oneYear) {
       throw new Error(`Timestamp out of reasonable range: ${timestamp}`);
     }
 
@@ -104,7 +108,11 @@ export async function getAdsbLol(lat, lon, radius) {
       aircraft: data.ac || []
     };
   } catch (error) {
-    console.error('Error:', error.message);
+    if (error.name === 'AbortError') {
+      console.error('Request timeout fetching adsb.lol data');
+    } else {
+      console.error('Error fetching adsb.lol:', error.message);
+    }
     return {
       now: Date.now() / 1000,
       messages: 0,
