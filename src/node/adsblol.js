@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 // constants
 const MAX_ADSB_LOL_RADIUS = 250; // nautical miles, adsb.lol API limit
 
