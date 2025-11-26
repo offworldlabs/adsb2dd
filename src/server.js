@@ -1,25 +1,72 @@
 import express from 'express';
 import cors from 'cors';
+import dns from 'dns';
+import { promisify } from 'util';
 
 import {checkTar1090, getTar1090} from './node/tar1090.js';
+import {checkAdsbLol, getAdsbLol} from './node/adsblol.js';
 import {lla2ecef, norm, ft2m} from './node/geometry.js';
 import {isValidNumber} from './node/validate.js';
 import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
+
+const resolve4 = promisify(dns.resolve4);
+const resolve6 = promisify(dns.resolve6);
 
 const app = express();
 app.use(cors());
 const port = process.env.PORT || 49155;
 
-// constants
 var dict = {};
 const tUpdate = 1000;
 const nApiMax = 10;
 const tDelete = 30;
 const tDeletePlane = 5;
+const tMaxStaleness = 10;
 const nMaxDelayArray = 10;
 const nDopplerSmooth = 10;
+const adsbLolRadius = 40;
 
 app.use(express.static('public'));
+
+/// @brief Check if an IP address is in a private or reserved range
+/// @param ip IP address string (IPv4 or IPv6)
+/// @return True if IP is private/reserved
+function isPrivateIP(ip) {
+  const ipv4PrivateRanges = [
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^0\.0\.0\.0$/,
+  ];
+
+  const ipv6PrivateRanges = [
+    /^::1$/,
+    /^fe80:/i,
+    /^fc00:/i,
+    /^fd00:/i,
+    /^ff00:/i,
+    /^::ffff:/i,
+  ];
+
+  if (ipv4PrivateRanges.some(range => range.test(ip))) {
+    return true;
+  }
+
+  if (ipv6PrivateRanges.some(range => range.test(ip))) {
+    return true;
+  }
+
+  if (/^::ffff:/i.test(ip)) {
+    const ipv4Part = ip.replace(/^::ffff:/i, '');
+    if (ipv4PrivateRanges.some(range => range.test(ipv4Part))) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 app.get('/api/dd', async (req, res) => {
 
@@ -28,12 +75,10 @@ app.get('/api/dd', async (req, res) => {
     return res.json(dict[req.originalUrl]['out']);
   }
 
-  // limit number of active requests
   if (Object.keys(dict).length > nApiMax) {
     return res.status(400).json({ error: 'Exceeded max API requests.' });
   }
-    
-  // extract and validate parameters
+
   const server = req.query.server;
   const rxParams = req.query.rx?.split(',').map(parseFloat);
   const txParams = req.query.tx?.split(',').map(parseFloat);
@@ -43,10 +88,110 @@ app.get('/api/dd', async (req, res) => {
   }
   const [rxLat, rxLon, rxAlt] = rxParams;
   const [txLat, txLon, txAlt] = txParams;
-  const apiUrl = server + '/data/aircraft.json';
 
-  // add new entry to dict
-  const isServerValid = await checkTar1090(apiUrl);
+  let serverUrl;
+  try {
+    serverUrl = new URL(server);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid server URL format' });
+  }
+
+  if (!['http:', 'https:'].includes(serverUrl.protocol)) {
+    return res.status(400).json({ error: 'Server URL must use http or https protocol' });
+  }
+
+  const isAdsbLol = serverUrl.hostname === 'api.adsb.lol';
+
+  if (isAdsbLol) {
+    if (server !== 'https://api.adsb.lol' || serverUrl.protocol !== 'https:') {
+      return res.status(400).json({ error: 'Invalid adsb.lol URL' });
+    }
+  }
+
+  if (!isAdsbLol) {
+    const hostname = serverUrl.hostname;
+
+    const privateIPv4Ranges = [
+      /^127\./,
+      /^10\./,
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+      /^192\.168\./,
+      /^169\.254\./,
+      /^0\.0\.0\.0$/,
+      /localhost/i
+    ];
+
+    const privateIPv6Ranges = [
+      /^::1$/,
+      /^::$/,
+      /^fe80:/i,
+      /^fc00:/i,
+      /^fd00:/i,
+      /^ff00:/i,
+    ];
+
+    if (/^::ffff:/i.test(hostname)) {
+      const ipv4Part = hostname.replace(/^::ffff:/i, '');
+      if (privateIPv4Ranges.some(range => range.test(ipv4Part))) {
+        return res.status(400).json({ error: 'Server URL points to private network' });
+      }
+    }
+
+    if (privateIPv4Ranges.some(range => range.test(hostname))) {
+      return res.status(400).json({ error: 'Server URL points to private network' });
+    }
+
+    if (privateIPv6Ranges.some(range => range.test(hostname))) {
+      return res.status(400).json({ error: 'Server URL points to private network' });
+    }
+
+    if (/^(0x[0-9a-f]+|\d+|0[0-7]+)$/i.test(hostname)) {
+      return res.status(400).json({ error: 'Server URL uses invalid IP format' });
+    }
+
+    if (!/^[\d.:]+$/.test(hostname)) {
+      try {
+        const resolutions = await Promise.allSettled([
+          resolve4(hostname),
+          resolve6(hostname)
+        ]);
+
+        const resolvedIPs = [];
+        for (const result of resolutions) {
+          if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+            resolvedIPs.push(...result.value);
+          }
+        }
+
+        if (resolvedIPs.length === 0) {
+          return res.status(400).json({ error: 'Unable to resolve server hostname' });
+        }
+
+        for (const ip of resolvedIPs) {
+          if (isPrivateIP(ip)) {
+            return res.status(400).json({ error: 'Server hostname resolves to private network' });
+          }
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Unable to resolve server hostname' });
+      }
+    }
+  }
+  let isServerValid;
+  let midLat, midLon;
+
+  if (isAdsbLol) {
+    midLat = (rxLat + txLat) / 2;
+    midLon = (rxLon + txLon) / 2;
+    if (isNaN(midLat) || isNaN(midLon)) {
+      return res.status(400).json({ error: 'Invalid coordinates' });
+    }
+    isServerValid = await checkAdsbLol(midLat, midLon, adsbLolRadius);
+  } else {
+    const apiUrl = new URL('/data/aircraft.json', server).href;
+    isServerValid = await checkTar1090(apiUrl);
+  }
+
   if (isServerValid) {
     dict[req.originalUrl] = {};
     dict[req.originalUrl]['rxLat'] = rxLat;
@@ -57,19 +202,27 @@ app.get('/api/dd', async (req, res) => {
     dict[req.originalUrl]['txAlt'] = txAlt;
     dict[req.originalUrl]['fc'] = fc;
     dict[req.originalUrl]['server'] = server;
-    dict[req.originalUrl]['apiUrl'] = apiUrl;
+    dict[req.originalUrl]['isAdsbLol'] = isAdsbLol;
+    if (isAdsbLol) {
+      dict[req.originalUrl]['midLat'] = midLat;
+      dict[req.originalUrl]['midLon'] = midLon;
+    } else {
+      dict[req.originalUrl]['apiUrl'] = new URL('/data/aircraft.json', server).href;
+    }
     dict[req.originalUrl]['out'] = {};
     dict[req.originalUrl]['timestamp'] = Date.now()/1000;
+    dict[req.originalUrl]['lastProcessed'] = 0;
+    dict[req.originalUrl]['lastProcessedTime'] = 0;
     dict[req.originalUrl]['proc'] = {};
     const ecefRx = lla2ecef(rxLat, rxLon, rxAlt);
     const ecefTx = lla2ecef(txLat, txLon, txAlt);
     dict[req.originalUrl]['ecefRx'] = ecefRx;
     dict[req.originalUrl]['ecefTx'] = ecefTx;
-    dict[req.originalUrl]['dRxTx'] = norm([ecefRx.x - ecefTx.x, 
+    dict[req.originalUrl]['dRxTx'] = norm([ecefRx.x - ecefTx.x,
       ecefRx.y - ecefTx.y, ecefRx.z - ecefTx.z]);
     return res.json(dict[req.originalUrl]['out']);
   } else {
-    return res.status(500).json({ error: 'Error checking tar1090 validity.' });
+    return res.status(500).json({ error: 'Error checking data source validity.' });
   }
 
 });
@@ -87,30 +240,31 @@ app.listen(port, host, () => {
 /// @return Void.
 const process_adsb2dd = async () => {
 
-  // loop over dict entries
   for (const [key, value] of Object.entries(dict)) {
 
-    // get latest JSON from server
-    var json = await getTar1090(dict[key]['apiUrl']);
+    let json;
+    if (dict[key]['isAdsbLol']) {
+      json = await getAdsbLol(dict[key]['midLat'], dict[key]['midLon'], adsbLolRadius);
+    } else {
+      json = await getTar1090(dict[key]['apiUrl']);
+    }
 
-    // skip if fetch failed or invalid response
     if (!json || !json.aircraft || !Array.isArray(json.aircraft)) {
       continue;
     }
 
-    // check that ADS-B data has updated
-    if (json.now === dict[key]['timestamp']) {
+    const currentTime = Date.now() / 1000;
+    const timeSinceProcessed = currentTime - dict[key]['lastProcessedTime'];
+    if (json.now === dict[key]['lastProcessed'] && timeSinceProcessed < tMaxStaleness) {
       continue;
     }
 
-    // core processing
     adsb2dd(key, json);
 
-    // Update the timestamp to prevent reprocessing the same data
-    dict[key]['timestamp'] = json.now;
+    dict[key]['lastProcessed'] = json.now;
+    dict[key]['lastProcessedTime'] = currentTime;
 
-    // remove key after inactivity
-    if (Date.now()/1000-dict[key]['out']['timestamp'] > tDelete) {
+    if (Date.now()/1000 - dict[key]['timestamp'] > tDelete) {
       delete(dict[key]);
     }
 
@@ -129,7 +283,6 @@ setTimeout(process_adsb2dd, tUpdate);
 /// @param json Current JSON from tar1090 server.
 function adsb2dd(key, json) {
 
-  // remove aircraft if no recent updates
   for (const aircraft in dict[key]['out']) {
     if (Date.now()/1000 - dict[key]['out'][aircraft]['timestamp'] > tDeletePlane) {
       delete(dict[key]['out'][aircraft]);
@@ -137,18 +290,16 @@ function adsb2dd(key, json) {
     }
   }
 
-  // loop over aircraft from JSON
   for (const aircraft of json.aircraft) {
-    const isValidAircraft = isValidNumber(aircraft['lat']) && 
-                           isValidNumber(aircraft['lon']) && 
-                           isValidNumber(aircraft['alt_geom']) && 
+    const isValidAircraft = isValidNumber(aircraft['lat']) &&
+                           isValidNumber(aircraft['lon']) &&
+                           isValidNumber(aircraft['alt_geom']) &&
                            (aircraft['flight'] != undefined);
 
     if (!isValidAircraft) {
       continue;
     }
 
-    // add new entry
     const hexCode = aircraft.hex;
     if (!(hexCode in dict[key]['out'])) {
       dict[key]['out'][hexCode] = {};
@@ -157,7 +308,6 @@ function adsb2dd(key, json) {
       dict[key]['proc'][hexCode]['timestamps'] = [];
     }
 
-    // skip if no change to lat/lon/alt
     if (dict[key]['out'][hexCode]['lat'] === aircraft['lat'] &&
       dict[key]['out'][hexCode]['lon'] === aircraft['lon'] &&
       dict[key]['out'][hexCode]['alt'] === aircraft['alt_geom']) {
@@ -170,10 +320,8 @@ function adsb2dd(key, json) {
     dict[key]['proc'][hexCode]['lon'] = aircraft['lon'];
     dict[key]['proc'][hexCode]['alt'] = aircraft['alt_geom'];
 
-    // convert target to ECEF
     const tar = lla2ecef(aircraft['lat'], aircraft['lon'], ft2m(aircraft['alt_geom']));
 
-    // bistatic delay (km)
     const dRxTar = norm([dict[key]['ecefRx'].x-tar.x,
       dict[key]['ecefRx'].y-tar.y,
       dict[key]['ecefRx'].z-tar.z]);
@@ -182,11 +330,9 @@ function adsb2dd(key, json) {
       dict[key]['ecefTx'].z-tar.z]);
     const delay = dRxTar + dTxTar - dict[key]['dRxTx'];
 
-    // store bistatic delay/timestamps for Doppler
     dict[key]['proc'][hexCode]['delays'].push(delay);
     dict[key]['proc'][hexCode]['timestamps'].push(json.now + aircraft.seen_pos);
 
-    // bistatic Doppler (Hz) - try velocity-based method first
     const doppler_vel = calculateDopplerFromVelocity(
       aircraft,
       tar,
@@ -199,24 +345,20 @@ function adsb2dd(key, json) {
 
     let doppler_pos = null;
     if (dict[key]['proc'][hexCode]['delays'].length >= 2) {
-      // smoothed derivative using median method (position-based)
       const doppler_ms_arr = smoothedDerivativeUsingMedian(
         dict[key]['proc'][hexCode]['delays'],
         dict[key]['proc'][hexCode]['timestamps'], nDopplerSmooth);
       const doppler_ms = doppler_ms_arr.at(-1);
 
-      // convert Doppler to Hz
       const wavelength = calculateWavelength(dict[key]['fc']);
       doppler_pos = -doppler_ms / wavelength;
 
-      // limit max number of storage
       if (dict[key]['proc'][hexCode]['delays'].length >= nMaxDelayArray) {
         dict[key]['proc'][hexCode]['delays'].shift();
         dict[key]['proc'][hexCode]['timestamps'].shift();
       }
     }
 
-    // output data - use velocity-based if available, otherwise position-based
     dict[key]['out'][hexCode]['delay'] = limit_digits(delay/1000, 5)
 
     if (doppler_vel !== null) {
@@ -227,7 +369,6 @@ function adsb2dd(key, json) {
       dict[key]['out'][hexCode]['doppler_method'] = 'position';
     }
 
-    // output both for comparison/debugging
     if (doppler_vel !== null) {
       dict[key]['out'][hexCode]['doppler_vel'] = limit_digits(doppler_vel, 5);
     }
@@ -236,7 +377,7 @@ function adsb2dd(key, json) {
     }
 
   }
-  
+
 }
 
 
@@ -248,8 +389,8 @@ function limit_digits(number, digits) {
   }
 }
 
-/// @brief Computes a smoothed derivative of delays with respect to timestamps. 
-/// @details Using a moving median method on the last k samples. 
+/// @brief Computes a smoothed derivative of delays with respect to timestamps.
+/// @details Using a moving median method on the last k samples.
 /// If fewer than k samples are given for delays and timestamps, it will use all available samples.
 /// Just a hunch and probably not optimum.
 /// @param delays Array to diff.
@@ -275,10 +416,9 @@ function smoothedDerivativeUsingMedian(delays, timestamps, k) {
         const deltaTime = lastKTimestamps[idx] - lastKTimestamps[idx - 1];
         return (delay - lastKDelays[idx - 1]) / deltaTime;
       }
-      return 0; // If it's the first element, set the derivative to 0.
+      return 0;
     });
 
-    // calculate the moving median of the delta delays
     const movingMedianDerivative = calculateMovingMedian(deltaDelays);
 
     result.push(movingMedianDerivative);

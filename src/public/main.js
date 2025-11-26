@@ -9,6 +9,21 @@
     }
   }
 
+  function toggleDataSource() {
+    const dataSource = document.getElementById('dataSource').value;
+    const serverUrlField = document.getElementById('serverUrlField');
+
+    if (dataSource === 'tar1090') {
+      serverUrlField.style.display = 'block';
+    } else {
+      serverUrlField.style.display = 'none';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    toggleDataSource();
+  });
+
   function isNumeric(value) {
     return !isNaN(parseFloat(value)) && isFinite(value);
   }
@@ -34,14 +49,25 @@
     const tx = (txLocation === 'custom' ? txLocationCustom : txLocation);
 
     const fc = document.getElementById('fc').value;
+    const dataSource = document.getElementById('dataSource').value;
     const serverName = document.getElementById('serverName').value;
 
-    // validation
-    if (!rx || !tx || !fc || !serverName) {
+    let server;
+    if (dataSource === 'adsblol') {
+      server = 'https://api.adsb.lol';
+    } else {
+      server = serverName;
+    }
+
+    if (!rx || !tx || !fc) {
       alert('Please fill in all fields.');
       return;
     }
-    if (!validateLatLonAlt(rx, 'Receiver Location') || 
+    if (dataSource === 'tar1090' && !serverName) {
+      alert('Please provide tar1090 server URL.');
+      return;
+    }
+    if (!validateLatLonAlt(rx, 'Receiver Location') ||
       !validateLatLonAlt(tx, 'Transmitter Location')) {
         return;
     }
@@ -50,24 +76,15 @@
       return;
     }
 
-    var url = window.location.href + `api/dd?rx=${rx}&tx=${tx}&fc=${fc}&server=${serverName}`;
-    url = url.replace(/\s/g, '');
+    const encodedRx = encodeURIComponent(rx.replace(/\s/g, ''));
+    const encodedTx = encodeURIComponent(tx.replace(/\s/g, ''));
+    const encodedFc = encodeURIComponent(fc);
+    const encodedServer = encodeURIComponent(server);
+
+    var url = window.location.href + `api/dd?rx=${encodedRx}&tx=${encodedTx}&fc=${encodedFc}&server=${encodedServer}`;
 
     if (url) {
-      window.open(url, '_blank'); // Open in a new tab or window
+      window.open(url, '_blank');
     }
-
-    // create an anchor element
-	  /*
-    var linkElement = document.createElement('a');
-    linkElement.href = url;
-    linkElement.target = '_blank'; // Open in a new tab or window
-    linkElement.textContent = url;
-
-    // clear the previous content and append the link
-    var generatedUrlElement = document.getElementById('generatedUrl');
-    generatedUrlElement.innerHTML = '';
-    generatedUrlElement.appendChild(linkElement);
-    */
   }
 
