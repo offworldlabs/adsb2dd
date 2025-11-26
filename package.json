@@ -7,7 +7,6 @@
   "scripts": {
     "test": "node --experimental-vm-modules src/node_modules/jest/bin/jest.js"
   },
-  "dependencies": {},
   "devDependencies": {
     "jest": "^30.2.0"
   }
