@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 /// @brief Check that the tar1090 server is valid and active.
 /// @param apiUrl Full path to aircraft.json.
 /// @return True if tar1090 server is valid.
