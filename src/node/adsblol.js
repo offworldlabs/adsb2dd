@@ -1,5 +1,4 @@
-// constants
-const MAX_ADSB_LOL_RADIUS = 250; // nautical miles, adsb.lol API limit
+const MAX_ADSB_LOL_RADIUS = 250;
 
 /// @brief Validate lat/lon/radius parameters
 /// @param lat Latitude

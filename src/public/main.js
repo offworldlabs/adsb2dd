@@ -20,7 +20,6 @@
     }
   }
 
-  // initialize UI state on page load
   document.addEventListener('DOMContentLoaded', function() {
     toggleDataSource();
   });
@@ -60,7 +59,6 @@
       server = serverName;
     }
 
-    // validation
     if (!rx || !tx || !fc) {
       alert('Please fill in all fields.');
       return;
@@ -86,7 +84,7 @@
     var url = window.location.href + `api/dd?rx=${encodedRx}&tx=${encodedTx}&fc=${encodedFc}&server=${encodedServer}`;
 
     if (url) {
-      window.open(url, '_blank'); // Open in a new tab or window
+      window.open(url, '_blank');
     }
   }
 
