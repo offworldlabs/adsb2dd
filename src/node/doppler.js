@@ -42,7 +42,7 @@ export function enuToEcef(vel_e, vel_n, vel_u, lat_rad, lon_rad) {
 /// @param ecefTx Transmitter position in ECEF
 /// @param dRxTar Distance from receiver to aircraft (meters)
 /// @param dTxTar Distance from transmitter to aircraft (meters)
-/// @param fc Carrier frequency in MHz
+/// @param fc Carrier frequency in Hz
 /// @return Doppler shift in Hz, or null if velocity data unavailable
 export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc) {
   if (aircraft.gs === undefined || aircraft.track === undefined ||
