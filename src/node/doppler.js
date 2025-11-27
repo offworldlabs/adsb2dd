@@ -9,10 +9,10 @@ export const MIN_ALTITUDE_FT = -1000;
 export const MAX_ALTITUDE_FT = 100000;
 
 /// @brief Calculate wavelength from frequency
-/// @param fc Carrier frequency in MHz
+/// @param fc Carrier frequency in Hz
 /// @return Wavelength in meters
 export function calculateWavelength(fc) {
-  return SPEED_OF_LIGHT / (fc * MHZ_TO_HZ);
+  return SPEED_OF_LIGHT / fc;
 }
 
 /// @brief Convert ENU velocity to ECEF velocity

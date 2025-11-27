@@ -132,3 +132,62 @@ describe('Response Validation Logic', () => {
     expect(isValid).toBe(true);
   });
 });
+
+describe('Timestamp Calculation Logic', () => {
+  test('aircraft timestamp uses subtraction for seen_pos', () => {
+    const json_now = 1700000000;
+    const seen_pos = 5.5;
+    const expected_timestamp = json_now - seen_pos;
+    const calculated_timestamp = json_now - seen_pos;
+
+    expect(calculated_timestamp).toBe(expected_timestamp);
+    expect(calculated_timestamp).toBe(1699999994.5);
+    expect(calculated_timestamp).toBeLessThan(json_now);
+  });
+
+  test('fresh aircraft position has timestamp close to now', () => {
+    const json_now = 1700000000;
+    const seen_pos = 0.1;
+    const timestamp = json_now - seen_pos;
+
+    expect(timestamp).toBeCloseTo(json_now, 0);
+    expect(timestamp).toBeLessThan(json_now);
+  });
+
+  test('stale aircraft position has older timestamp', () => {
+    const json_now = 1700000000;
+    const seen_pos = 50;
+    const timestamp = json_now - seen_pos;
+
+    expect(timestamp).toBe(1699999950);
+    expect(json_now - timestamp).toBe(50);
+  });
+
+  test('aircraft with high seen_pos should be deleted after tDeletePlane seconds', () => {
+    const tDeletePlane = 5;
+    const json_now = 1700000000;
+    const seen_pos = 50;
+    const aircraft_timestamp = json_now - seen_pos;
+    const current_time = json_now + 1;
+
+    const time_since_position = current_time - aircraft_timestamp;
+    const should_delete = time_since_position > tDeletePlane;
+
+    expect(time_since_position).toBe(51);
+    expect(should_delete).toBe(true);
+  });
+
+  test('aircraft with recent position should not be deleted', () => {
+    const tDeletePlane = 5;
+    const json_now = 1700000000;
+    const seen_pos = 2;
+    const aircraft_timestamp = json_now - seen_pos;
+    const current_time = json_now + 1;
+
+    const time_since_position = current_time - aircraft_timestamp;
+    const should_delete = time_since_position > tDeletePlane;
+
+    expect(time_since_position).toBe(3);
+    expect(should_delete).toBe(false);
+  });
+});

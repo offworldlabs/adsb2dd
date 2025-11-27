@@ -314,7 +314,7 @@ function adsb2dd(key, json) {
       continue;
     }
 
-    dict[key]['out'][hexCode]['timestamp'] = json.now + aircraft.seen_pos;
+    dict[key]['out'][hexCode]['timestamp'] = json.now - aircraft.seen_pos;
     dict[key]['out'][hexCode]['flight'] = (aircraft.flight);
     dict[key]['proc'][hexCode]['lat'] = aircraft['lat'];
     dict[key]['proc'][hexCode]['lon'] = aircraft['lon'];
