@@ -4,7 +4,7 @@ import {lla2ecef, norm} from '../src/node/geometry.js';
 describe('E2E Bug Fixes', () => {
   describe('Doppler magnitude fix (units conversion)', () => {
     test('503 MHz system produces realistic Doppler values for commercial aircraft', () => {
-      const fc_hz = 503000000;
+      const fc_mhz = 503;
 
       const rxLat = 37.7644;
       const rxLon = -122.3954;
@@ -46,7 +46,7 @@ describe('E2E Bug Fixes', () => {
         ecefTx,
         dRxTar,
         dTxTar,
-        fc_hz
+        fc_mhz
       );
 
       expect(doppler).not.toBeNull();
@@ -56,17 +56,17 @@ describe('E2E Bug Fixes', () => {
     });
 
     test('wavelength is correct for 503 MHz', () => {
-      const fc_hz = 503000000;
-      const wavelength = calculateWavelength(fc_hz);
+      const fc_mhz = 503;
+      const wavelength = calculateWavelength(fc_mhz);
 
       expect(wavelength).toBeCloseTo(0.596, 3);
 
-      const expected = SPEED_OF_LIGHT / fc_hz;
-      expect(wavelength).toBe(expected);
+      const expected = SPEED_OF_LIGHT / (fc_mhz * 1e6);
+      expect(wavelength).toBeCloseTo(expected, 6);
     });
 
     test('Doppler values are in Hz not millions of Hz', () => {
-      const fc_hz = 503000000;
+      const fc_mhz = 503;
 
       const aircraft = {
         lat: 37.7,
@@ -100,10 +100,10 @@ describe('E2E Bug Fixes', () => {
         ecefTx,
         dRxTar,
         dTxTar,
-        fc_hz
+        fc_mhz
       );
 
-      const wavelength = calculateWavelength(fc_hz);
+      const wavelength = calculateWavelength(fc_mhz);
       expect(wavelength).toBeCloseTo(0.596, 3);
       expect(doppler).not.toBeNull();
       expect(Math.abs(doppler)).toBeLessThan(10000);
@@ -170,7 +170,7 @@ describe('E2E Bug Fixes', () => {
 
   describe('Combined realistic scenario', () => {
     test('full system processes aircraft correctly with fixes', () => {
-      const fc_hz = 503000000;
+      const fc_mhz = 503;
       const json_now = Date.now() / 1000;
       const seen_pos = 2.5;
 
@@ -211,7 +211,7 @@ describe('E2E Bug Fixes', () => {
         ecefTx,
         dRxTar,
         dTxTar,
-        fc_hz
+        fc_mhz
       );
 
       expect(timestamp).toBeLessThan(json_now);
@@ -221,7 +221,7 @@ describe('E2E Bug Fixes', () => {
       expect(Math.abs(doppler)).toBeLessThan(10000);
       expect(Math.abs(doppler)).toBeGreaterThan(1);
 
-      const wavelength = calculateWavelength(fc_hz);
+      const wavelength = calculateWavelength(fc_mhz);
       expect(wavelength).toBeCloseTo(0.596, 3);
     });
   });
@@ -330,7 +330,7 @@ describe('E2E Bug Fixes', () => {
     });
 
     test('realistic aircraft movement produces valid Doppler from smoothing', () => {
-      const fc_hz = 503000000;
+      const fc_mhz = 503;
       const json_now = 1700000000;
 
       const delays = [50000, 50100, 50200, 50300, 50400];
@@ -347,7 +347,7 @@ describe('E2E Bug Fixes', () => {
       const derivatives = smoothedDerivativeUsingMedian(delays, timestamps, 3);
       const doppler_ms = derivatives[derivatives.length - 1];
 
-      const wavelength = calculateWavelength(fc_hz);
+      const wavelength = calculateWavelength(fc_mhz);
       const doppler_hz = -doppler_ms / wavelength;
 
       expect(Math.abs(doppler_hz)).toBeLessThan(1000000);
