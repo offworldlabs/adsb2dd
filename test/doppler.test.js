@@ -3,17 +3,17 @@ import {enuToEcef, calculateDopplerFromVelocity, calculateWavelength, SPEED_OF_L
 
 describe('Velocity-Based Doppler', () => {
   describe('Wavelength calculation', () => {
-    test('calculates correct wavelength for 503 MHz (in Hz)', () => {
-      const fc_hz = 503000000;
-      const wavelength = calculateWavelength(fc_hz);
-      const expected = SPEED_OF_LIGHT / fc_hz;
+    test('calculates correct wavelength for 503 MHz', () => {
+      const fc_mhz = 503;
+      const wavelength = calculateWavelength(fc_mhz);
+      const expected = SPEED_OF_LIGHT / (fc_mhz * 1e6);
       expect(wavelength).toBeCloseTo(expected, 6);
       expect(wavelength).toBeCloseTo(0.596, 3);
     });
 
-    test('calculates correct wavelength for 204.64 MHz (in Hz)', () => {
-      const fc_hz = 204640000;
-      const wavelength = calculateWavelength(fc_hz);
+    test('calculates correct wavelength for 204.64 MHz', () => {
+      const fc_mhz = 204.64;
+      const wavelength = calculateWavelength(fc_mhz);
       expect(wavelength).toBeCloseTo(1.465, 3);
     });
   });
@@ -65,7 +65,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(Math.abs(doppler)).toBeGreaterThan(10);
@@ -87,7 +87,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(Math.abs(doppler)).toBeLessThan(10);
@@ -109,7 +109,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(Math.abs(doppler)).toBeLessThan(20);
@@ -130,7 +130,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).not.toBeNull();
@@ -152,7 +152,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = 0.5;
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).toBeNull();
@@ -173,7 +173,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).toBeNull();
@@ -194,7 +194,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).toBeNull();
@@ -215,7 +215,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).not.toBeNull();
@@ -236,7 +236,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).toBeNull();
@@ -258,7 +258,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).toBeNull();
@@ -280,7 +280,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).toBeNull();
@@ -301,7 +301,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).not.toBeNull();
@@ -322,7 +322,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).toBeNull();
@@ -344,7 +344,7 @@ describe('Velocity-Based Doppler', () => {
       const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
       const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
 
-      const fc = 204640000;
+      const fc = 204.64;
       const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
 
       expect(doppler).not.toBeNull();
