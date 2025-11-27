@@ -331,7 +331,7 @@ function adsb2dd(key, json) {
     const delay = dRxTar + dTxTar - dict[key]['dRxTx'];
 
     dict[key]['proc'][hexCode]['delays'].push(delay);
-    dict[key]['proc'][hexCode]['timestamps'].push(json.now + aircraft.seen_pos);
+    dict[key]['proc'][hexCode]['timestamps'].push(json.now - aircraft.seen_pos);
 
     const doppler_vel = calculateDopplerFromVelocity(
       aircraft,

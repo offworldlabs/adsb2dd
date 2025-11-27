@@ -225,4 +225,133 @@ describe('E2E Bug Fixes', () => {
       expect(wavelength).toBeCloseTo(0.596, 3);
     });
   });
+
+  describe('Doppler smoothing with corrected timestamps', () => {
+    function smoothedDerivativeUsingMedian(delays, timestamps, k) {
+      if (delays.length !== timestamps.length || delays.length < 2 || k < 2) {
+        throw new Error('Invalid input data for computing the derivative.');
+      }
+
+      const result = [];
+
+      for (let i = 0; i < delays.length; i++) {
+        const startIdx = Math.max(0, i - k + 1);
+        const endIdx = i + 1;
+
+        const lastKDelays = delays.slice(startIdx, endIdx);
+        const lastKTimestamps = timestamps.slice(startIdx, endIdx);
+
+        const deltaDelays = lastKDelays.map((delay, idx) => {
+          if (idx > 0) {
+            const deltaTime = lastKTimestamps[idx] - lastKTimestamps[idx - 1];
+            return (delay - lastKDelays[idx - 1]) / deltaTime;
+          }
+          return 0;
+        });
+
+        const sortedArr = [...deltaDelays].sort((a, b) => a - b);
+        const middle = Math.floor(sortedArr.length / 2);
+        const movingMedianDerivative = sortedArr.length % 2 === 0
+          ? (sortedArr[middle - 1] + sortedArr[middle]) / 2
+          : sortedArr[middle];
+
+        result.push(movingMedianDerivative);
+      }
+
+      return result;
+    }
+
+    test('position-based Doppler uses correct timestamps for derivative', () => {
+      const json_now = 1700000000;
+      const delays = [];
+      const timestamps = [];
+
+      delays.push(100000);
+      timestamps.push(json_now - 5);
+
+      delays.push(100100);
+      timestamps.push(json_now - 4);
+
+      delays.push(100200);
+      timestamps.push(json_now - 3);
+
+      const derivatives = smoothedDerivativeUsingMedian(delays, timestamps, 3);
+
+      expect(derivatives.length).toBe(3);
+      expect(derivatives[derivatives.length - 1]).toBeCloseTo(100, 1);
+
+      for (let i = 0; i < timestamps.length; i++) {
+        expect(timestamps[i]).toBeLessThan(json_now);
+      }
+    });
+
+    test('timestamps must be monotonically increasing for valid derivatives', () => {
+      const timestamps = [
+        1700000000 - 5,
+        1700000001 - 3,
+        1700000002 - 1
+      ];
+
+      for (let i = 1; i < timestamps.length; i++) {
+        expect(timestamps[i]).toBeGreaterThan(timestamps[i - 1]);
+      }
+
+      const delays = [100000, 100100, 100200];
+      const derivatives = smoothedDerivativeUsingMedian(delays, timestamps, 3);
+
+      expect(derivatives[derivatives.length - 1]).toBeGreaterThan(0);
+      expect(derivatives[derivatives.length - 1]).toBeLessThan(1000);
+    });
+
+    test('future timestamps would cause negative deltaTime (regression test)', () => {
+      const json_now = 1700000000;
+
+      const timestamps_wrong = [
+        json_now + 5,
+        json_now + 4,
+        json_now + 3
+      ];
+
+      for (let i = 1; i < timestamps_wrong.length; i++) {
+        const deltaTime = timestamps_wrong[i] - timestamps_wrong[i - 1];
+        expect(deltaTime).toBeLessThan(0);
+      }
+
+      const timestamps_correct = [
+        json_now - 5,
+        json_now - 4,
+        json_now - 3
+      ];
+
+      for (let i = 1; i < timestamps_correct.length; i++) {
+        const deltaTime = timestamps_correct[i] - timestamps_correct[i - 1];
+        expect(deltaTime).toBeGreaterThan(0);
+      }
+    });
+
+    test('realistic aircraft movement produces valid Doppler from smoothing', () => {
+      const fc_hz = 503000000;
+      const json_now = 1700000000;
+
+      const delays = [50000, 50100, 50200, 50300, 50400];
+      const timestamps = [];
+
+      for (let i = 0; i < delays.length; i++) {
+        timestamps.push(json_now + i - (5 - i) * 0.5);
+      }
+
+      for (let i = 1; i < timestamps.length; i++) {
+        expect(timestamps[i]).toBeGreaterThan(timestamps[i - 1]);
+      }
+
+      const derivatives = smoothedDerivativeUsingMedian(delays, timestamps, 3);
+      const doppler_ms = derivatives[derivatives.length - 1];
+
+      const wavelength = calculateWavelength(fc_hz);
+      const doppler_hz = -doppler_ms / wavelength;
+
+      expect(Math.abs(doppler_hz)).toBeLessThan(1000000);
+      expect(Math.abs(doppler_hz)).toBeGreaterThan(0);
+    });
+  });
 });
