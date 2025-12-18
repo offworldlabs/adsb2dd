@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+
+jobs:
+  build-and-publish:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      tag: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+      publish: "true"
+
+  create-release:
+    needs: build-and-publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## Docker Image
+
+            The adsb2dd Docker image has been published to GitHub Container Registry:
+
+            ```bash
+            docker pull ghcr.io/offworldlabs/adsb2dd:${{ github.ref_name }}
+            ```
+
+            ### What's Changed
+            See the commit history for details.
+          draft: false
+          prerelease: false
