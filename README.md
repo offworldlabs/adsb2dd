@@ -9,6 +9,29 @@ Convert ADSB data to delay-Doppler truth - see a live instance at [http://adsb2d
 - Outputs JSON data with a delay in km and Doppler in Hz.
 - Use the JSON output to map truth onto a delay-Doppler map, for example in [blah2](http://github.com/30hours/blah2).
 
+## Building Docker Images (CI/CD)
+
+To build and publish Docker images via GitHub Actions:
+
+**Manual build (dev/testing):**
+1. Go to Actions → `docker-build` workflow
+2. Click "Run workflow"
+3. Set `tag` (e.g., `dev` or `v1.0.0`)
+4. Set `publish` to `true` to push to GHCR
+
+**Release build (production):**
+1. Create and push a version tag:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+2. The `release` workflow will automatically build and publish to `ghcr.io/offworldlabs/adsb2dd:<tag>`
+
+**Pull the image:**
+```bash
+docker pull ghcr.io/offworldlabs/adsb2dd:v1.0.0
+```
+
 ## Usage
 
 - Install docker and docker-compose on the host machine.
