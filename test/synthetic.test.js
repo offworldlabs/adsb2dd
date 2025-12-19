@@ -4,7 +4,9 @@ import {
   parseSyntheticConfig,
   validateSyntheticConfig,
   generateSyntheticFrame,
-  convertToFrameFormat
+  convertToFrameFormat,
+  generateMach5Trajectory,
+  trajectoryToDelayDoppler
 } from '../src/node/synthetic.js';
 
 describe('Synthetic Detection Generation', () => {
@@ -472,5 +474,138 @@ describe('Synthetic Detection Generation', () => {
       expect(frame.delay.length).toBe(1);
       expect(frame.adsb[0].hex).toBe('abc123');
     });
+  });
+});
+
+describe('Mach 5 Trajectory Generation', () => {
+  test('generateMach5Trajectory produces correct number of positions', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 60, 1.0
+    );
+
+    expect(trajectory.length).toBe(60);
+  });
+
+  test('generateMach5Trajectory has consistent speed', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 10, 1.0
+    );
+
+    for (const pos of trajectory) {
+      expect(pos.speed).toBe(1715);
+      expect(pos.gs).toBeCloseTo(1715 * 1.94384, 1);
+    }
+  });
+
+  test('generateMach5Trajectory moves in correct direction', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 10, 1.0
+    );
+
+    const startLon = trajectory[0].lon;
+    const endLon = trajectory[trajectory.length - 1].lon;
+
+    expect(endLon).toBeGreaterThan(startLon);
+  });
+
+  test('generateMach5Trajectory maintains altitude', () => {
+    const altitude = 15000;
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, altitude, 90, 10, 1.0
+    );
+
+    for (const pos of trajectory) {
+      expect(pos.alt).toBe(altitude);
+    }
+  });
+
+  test('generateMach5Trajectory has correct ADS-B fields', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 10, 1.0
+    );
+
+    for (const pos of trajectory) {
+      expect(pos.hex).toBe('MACH5X');
+      expect(pos.flight).toBe('MACH5');
+      expect(pos.track).toBe(90);
+      expect(pos).toHaveProperty('alt_baro');
+      expect(pos).toHaveProperty('timestamp');
+    }
+  });
+
+  test('trajectoryToDelayDoppler produces detections', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 10, 1.0
+    );
+
+    const detections = trajectoryToDelayDoppler(
+      trajectory, 37.7644, -122.3954, 23, 37.49917, -121.87222, 783, 503
+    );
+
+    expect(detections.length).toBe(trajectory.length);
+  });
+
+  test('trajectoryToDelayDoppler computes delay correctly', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 10, 1.0
+    );
+
+    const detections = trajectoryToDelayDoppler(
+      trajectory, 37.7644, -122.3954, 23, 37.49917, -121.87222, 783, 503
+    );
+
+    for (const detection of detections) {
+      expect(detection.delay).toBeGreaterThan(0);
+      expect(detection.delay).toBeLessThan(1000);
+    }
+  });
+
+  test('trajectoryToDelayDoppler computes Doppler for high-speed target', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 10, 1.0
+    );
+
+    const detections = trajectoryToDelayDoppler(
+      trajectory, 37.7644, -122.3954, 23, 37.49917, -121.87222, 783, 503
+    );
+
+    const dopplerValues = detections.slice(1).map(d => Math.abs(d.doppler));
+    const maxDoppler = Math.max(...dopplerValues);
+
+    expect(maxDoppler).toBeGreaterThan(100);
+  });
+
+  test('trajectoryToDelayDoppler includes ADS-B metadata', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 10, 1.0
+    );
+
+    const detections = trajectoryToDelayDoppler(
+      trajectory, 37.7644, -122.3954, 23, 37.49917, -121.87222, 783, 503
+    );
+
+    for (const detection of detections) {
+      expect(detection.adsb).toHaveProperty('hex');
+      expect(detection.adsb).toHaveProperty('lat');
+      expect(detection.adsb).toHaveProperty('lon');
+      expect(detection.adsb).toHaveProperty('alt_baro');
+      expect(detection.adsb).toHaveProperty('gs');
+      expect(detection.adsb).toHaveProperty('track');
+      expect(detection.adsb).toHaveProperty('flight');
+    }
+  });
+
+  test('Mach 5 trajectory covers significant distance', () => {
+    const trajectory = generateMach5Trajectory(
+      37.7, -122.4, 15000, 90, 60, 1.0
+    );
+
+    const start = trajectory[0];
+    const end = trajectory[trajectory.length - 1];
+
+    const latDiff = Math.abs(end.lat - start.lat);
+    const lonDiff = Math.abs(end.lon - start.lon);
+
+    expect(latDiff + lonDiff).toBeGreaterThan(0.5);
   });
 });
