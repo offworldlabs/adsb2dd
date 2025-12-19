@@ -42,12 +42,118 @@ The system architecture is as follows:
 - The API provides a JSON output in the format `{"<hex-code>":{"timestamp":<timestamp>,"flight":<flight-number>,"delay":<delay>,"doppler":<doppler>}}`.
 - If no API calls are provided for a set of inputs after 10 minutes, that set will be dropped from the processing loop.
 
+## Synthetic Detection Generation
+
+The `/api/synthetic-detections` endpoint generates synthetic radar detections with configurable noise characteristics for testing and validation of passive radar tracking systems. This endpoint fetches live ADS-B data and converts it to realistic radar detections with measurement errors, missed detections, and false alarms.
+
+### Key Features
+
+- **Configurable Gaussian noise**: Add realistic measurement errors to delay and Doppler
+- **Missed detections**: Simulate detection probability < 1.0
+- **False alarms**: Generate Poisson-distributed clutter detections
+- **Reproducible**: Seedable random number generation for repeatable tests
+- **Extended format**: Outputs frame-based arrays compatible with [retina-tracker](https://github.com/30hours/retina-tracker)
+
+### API Parameters
+
+**Required Parameters:**
+- `server`: tar1090 or adsb.lol server URL
+- `rx`: Receiver coordinates as `lat,lon,alt` (decimal degrees, meters)
+- `tx`: Transmitter coordinates as `lat,lon,alt` (decimal degrees, meters)
+- `fc`: Transmitter frequency in MHz
+
+**Optional Noise Parameters:**
+- `noise_delay`: Delay noise standard deviation in km (default: 0.5)
+- `noise_doppler`: Doppler noise standard deviation in Hz (default: 2.0)
+- `snr_min`: Minimum SNR in dB (default: 8)
+- `snr_max`: Maximum SNR in dB (default: 20)
+- `detection_prob`: Detection probability 0-1 (default: 0.95)
+- `false_alarm_rate`: False alarms per frame (default: 0.5)
+
+**Optional Timing Parameters:**
+- `frame_interval`: Frame interval in ms (default: 500)
+- `duration`: Total duration in seconds (default: 10)
+
+**Optional Range Parameters:**
+- `delay_min`: Minimum delay for false alarms in km (default: 0)
+- `delay_max`: Maximum delay for false alarms in km (default: 400)
+- `doppler_min`: Minimum Doppler for false alarms in Hz (default: -200)
+- `doppler_max`: Maximum Doppler for false alarms in Hz (default: 200)
+
+**Optional Reproducibility:**
+- `seed`: Random seed for reproducible results (default: current timestamp)
+
+### Example Usage
+
+**Basic usage with default noise:**
+```
+http://localhost:49155/api/synthetic-detections?server=http://adsb.30hours.dev&rx=51.5074,-0.1278,0&tx=51.5074,-0.0285,0&fc=204.64
+```
+
+**Custom noise parameters:**
+```
+http://localhost:49155/api/synthetic-detections?server=http://adsb.30hours.dev&rx=51.5074,-0.1278,0&tx=51.5074,-0.0285,0&fc=204.64&noise_delay=1.0&noise_doppler=5.0&detection_prob=0.8&false_alarm_rate=2.0
+```
+
+**Reproducible test with seed:**
+```
+http://localhost:49155/api/synthetic-detections?server=http://adsb.30hours.dev&rx=51.5074,-0.1278,0&tx=51.5074,-0.0285,0&fc=204.64&seed=test-42
+```
+
+### Output Format
+
+The endpoint returns an array of detection frames in the extended `.detection` format compatible with retina-tracker:
+
+```json
+[
+  {
+    "timestamp": 1718747745000,
+    "delay": [16.1, 22.3, 15.8],
+    "doppler": [134.5, -50.2, 88.3],
+    "snr": [15.2, 12.8, 18.5],
+    "adsb": [
+      {
+        "hex": "a12345",
+        "lat": 37.7749,
+        "lon": -122.4194,
+        "alt_baro": 5000,
+        "gs": 250,
+        "track": 45,
+        "flight": "UAL123"
+      },
+      {
+        "hex": "b67890",
+        "lat": 37.8100,
+        "lon": -122.3400,
+        "alt_baro": 8500,
+        "gs": 300,
+        "track": 120,
+        "flight": "DAL456"
+      },
+      null
+    ]
+  }
+]
+```
+
+The `adsb` array is parallel to the `delay`, `doppler`, and `snr` arrays. Real aircraft detections include ADS-B metadata for ground truth comparison, while false alarms have `null` entries.
+
+### Statistical Properties
+
+The synthetic detections have the following statistical properties:
+
+- **Delay noise**: Gaussian with mean 0 and standard deviation `noise_delay` km
+- **Doppler noise**: Gaussian with mean 0 and standard deviation `noise_doppler` Hz
+- **SNR**: Uniform distribution between `snr_min` and `snr_max` dB
+- **Detection probability**: Bernoulli trial with probability `detection_prob` per aircraft per frame
+- **False alarms**: Poisson-distributed count with rate `false_alarm_rate` per frame
+- **False alarm positions**: Uniformly distributed in delay-Doppler space
+
 ## Future Work
 
 - Add a 2D plot showing all aircraft in delay-Doppler space.
 - Add a map showing aircraft in geographic space below the above plot.
 - Investigate algorithms to accurately compute smooth Doppler values.
-- Some functional tests to ensure key features are working.
 
 ## License
 

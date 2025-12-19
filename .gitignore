@@ -3,3 +3,4 @@ package-lock.json
 *.log
 .env
 .DS_Store
+data/
