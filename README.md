@@ -149,6 +149,82 @@ The synthetic detections have the following statistical properties:
 - **False alarms**: Poisson-distributed count with rate `false_alarm_rate` per frame
 - **False alarm positions**: Uniformly distributed in delay-Doppler space
 
+## Mach 5 Anomalous Target Generation
+
+For testing anomaly detection systems, adsb2dd can generate synthetic Mach 5 (~1715 m/s) target trajectories with realistic delay-Doppler characteristics.
+
+### Usage
+
+Generate Mach 5 target data using the provided script:
+
+```bash
+node generate_mach5_targets.js [options]
+```
+
+### Options
+
+- `--rx LAT,LON,ALT`: Receiver position (default: 37.7644,-122.3954,23)
+- `--tx LAT,LON,ALT`: Transmitter position (default: 37.49917,-121.87222,783)
+- `--fc FREQUENCY`: Carrier frequency in MHz (default: 503)
+- `--start LAT,LON,ALT`: Starting position for Mach 5 target (default: 37.5,-123.0,15000)
+- `--heading DEGREES`: Direction of travel (default: 90, eastward)
+- `--duration SECONDS`: Duration of trajectory (default: 60)
+- `--timestep SECONDS`: Time between position samples (default: 0.5)
+- `--output FILE`: Output .detection file (default: ./data/mach5_targets.detection)
+- `--no-noise`: Disable synthetic noise (perfect measurements)
+
+### Examples
+
+**Generate default Mach 5 target:**
+```bash
+node generate_mach5_targets.js
+```
+
+**Custom trajectory heading north from San Francisco:**
+```bash
+node generate_mach5_targets.js --start 37.7,-122.4,15000 --heading 0 --duration 120
+```
+
+**Perfect measurements (no noise):**
+```bash
+node generate_mach5_targets.js --no-noise --output data/mach5_perfect.detection
+```
+
+### Output Format
+
+The generated `.detection` file contains an array of frames compatible with [retina-tracker](https://github.com/30hours/retina-tracker):
+
+```json
+[
+  {
+    "timestamp": 1718747745000,
+    "delay": [156.32],
+    "doppler": [523.45],
+    "snr": [15.2],
+    "adsb": [
+      {
+        "hex": "MACH5X",
+        "lat": 37.52,
+        "lon": -122.95,
+        "alt_baro": 49213,
+        "gs": 3332,
+        "track": 90,
+        "flight": "MACH5"
+      }
+    ]
+  }
+]
+```
+
+### Technical Details
+
+- **Speed**: Mach 5 at sea level (~1715 m/s or ~3332 knots)
+- **Doppler shift**: Significantly higher than normal aircraft (typically >100 Hz)
+- **Trajectory**: Great circle path with configurable heading
+- **Noise**: Optional Gaussian noise on delay and Doppler measurements
+
+This feature is designed to test anomaly detection in retina-tracker (see [retina-tracker#4](https://github.com/offworldlabs/retina-tracker/issues/4)).
+
 ## Future Work
 
 - Add a 2D plot showing all aircraft in delay-Doppler space.

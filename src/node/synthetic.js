@@ -339,3 +339,154 @@ export function convertToFrameFormat(aircraftDict, aircraftRawData, timestamp) {
     adsb: adsb
   };
 }
+
+/// @brief Generate synthetic Mach 5 target trajectory
+/// @param startLat Starting latitude (degrees)
+/// @param startLon Starting longitude (degrees)
+/// @param startAlt Starting altitude (meters)
+/// @param heading Direction of travel (degrees, 0=North, 90=East)
+/// @param duration Duration of trajectory (seconds)
+/// @param timestep Time between positions (seconds)
+/// @return Array of positions with {lat, lon, alt, timestamp, speed, heading}
+export function generateMach5Trajectory(startLat, startLon, startAlt, heading, duration, timestep = 1.0) {
+  const MACH_5_SPEED = 1715;
+  const EARTH_RADIUS = 6371000;
+
+  const positions = [];
+  const numSteps = Math.ceil(duration / timestep);
+  const startTime = Date.now();
+
+  for (let i = 0; i < numSteps; i++) {
+    const elapsedTime = i * timestep;
+    const distanceTraveled = MACH_5_SPEED * elapsedTime;
+
+    const headingRad = (heading * Math.PI) / 180;
+    const angularDistance = distanceTraveled / EARTH_RADIUS;
+
+    const lat1 = (startLat * Math.PI) / 180;
+    const lon1 = (startLon * Math.PI) / 180;
+
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(angularDistance) +
+      Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(headingRad)
+    );
+
+    const lon2 = lon1 + Math.atan2(
+      Math.sin(headingRad) * Math.sin(angularDistance) * Math.cos(lat1),
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+    positions.push({
+      lat: (lat2 * 180) / Math.PI,
+      lon: (lon2 * 180) / Math.PI,
+      alt: startAlt,
+      timestamp: startTime + elapsedTime * 1000,
+      speed: MACH_5_SPEED,
+      heading: heading,
+      hex: 'MACH5X',
+      flight: 'MACH5',
+      alt_baro: startAlt / 0.3048,
+      gs: MACH_5_SPEED * 1.94384,
+      track: heading
+    });
+  }
+
+  return positions;
+}
+
+/// @brief Generate delay-Doppler data for Mach 5 trajectory
+/// @param trajectory Array of positions from generateMach5Trajectory
+/// @param rxLat Receiver latitude (degrees)
+/// @param rxLon Receiver longitude (degrees)
+/// @param rxAlt Receiver altitude (meters)
+/// @param txLat Transmitter latitude (degrees)
+/// @param txLon Transmitter longitude (degrees)
+/// @param txAlt Transmitter altitude (meters)
+/// @param fc Carrier frequency (MHz)
+/// @return Array of {timestamp, delay, doppler, adsb}
+export function trajectoryToDelayDoppler(trajectory, rxLat, rxLon, rxAlt, txLat, txLon, txAlt, fc) {
+  const lla2ecef = (lat, lon, alt) => {
+    const radian = Math.PI / 180.0;
+    const a = 6378137.0;
+    const f = 1.0 / 298.257223563;
+    const esq = 2.0 * f - f * f;
+    const latRad = lat * radian;
+    const lonRad = lon * radian;
+    const N = a / Math.sqrt(1.0 - esq * Math.sin(latRad) * Math.sin(latRad));
+    return {
+      x: (N + alt) * Math.cos(latRad) * Math.cos(lonRad),
+      y: (N + alt) * Math.cos(latRad) * Math.sin(lonRad),
+      z: (N * (1.0 - esq) + alt) * Math.sin(latRad)
+    };
+  };
+
+  const norm = (vec) => Math.sqrt(vec.x ** 2 + vec.y ** 2 + vec.z ** 2);
+
+  const ecefRx = lla2ecef(rxLat, rxLon, rxAlt);
+  const ecefTx = lla2ecef(txLat, txLon, txAlt);
+  const dRxTx = norm({
+    x: ecefRx.x - ecefTx.x,
+    y: ecefRx.y - ecefTx.y,
+    z: ecefRx.z - ecefTx.z
+  });
+
+  const detections = [];
+
+  for (let i = 0; i < trajectory.length; i++) {
+    const pos = trajectory[i];
+    const tar = lla2ecef(pos.lat, pos.lon, pos.alt);
+
+    const dRxTar = norm({
+      x: ecefRx.x - tar.x,
+      y: ecefRx.y - tar.y,
+      z: ecefRx.z - tar.z
+    });
+
+    const dTxTar = norm({
+      x: ecefTx.x - tar.x,
+      y: ecefTx.y - tar.y,
+      z: ecefTx.z - tar.z
+    });
+
+    const delay = (dRxTar + dTxTar - dRxTx) / 1000;
+
+    let doppler = 0;
+    if (i > 0) {
+      const prevPos = trajectory[i - 1];
+      const dt = (pos.timestamp - prevPos.timestamp) / 1000;
+      const prevTar = lla2ecef(prevPos.lat, prevPos.lon, prevPos.alt);
+      const prevDRxTar = norm({
+        x: ecefRx.x - prevTar.x,
+        y: ecefRx.y - prevTar.y,
+        z: ecefRx.z - prevTar.z
+      });
+      const prevDTxTar = norm({
+        x: ecefTx.x - prevTar.x,
+        y: ecefTx.y - prevTar.y,
+        z: ecefTx.z - prevTar.z
+      });
+      const prevBistatic = prevDRxTar + prevDTxTar;
+      const currBistatic = dRxTar + dTxTar;
+      const rangeRate = (currBistatic - prevBistatic) / dt;
+      const wavelength = 299792458 / (fc * 1e6);
+      doppler = -rangeRate / wavelength;
+    }
+
+    detections.push({
+      timestamp: pos.timestamp,
+      delay: delay,
+      doppler: doppler,
+      adsb: {
+        hex: pos.hex,
+        lat: pos.lat,
+        lon: pos.lon,
+        alt_baro: pos.alt_baro,
+        gs: pos.gs,
+        track: pos.track,
+        flight: pos.flight
+      }
+    });
+  }
+
+  return detections;
+}
