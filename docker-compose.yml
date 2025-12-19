@@ -2,9 +2,9 @@ version: '3'
 services:
   adsb2dd:
     restart: always
-    build: 
+    build:
       context: .
-      network: host
     image: adsb2dd
-    network_mode: host
     container_name: adsb2dd
+    ports:
+      - "49155:49155"
