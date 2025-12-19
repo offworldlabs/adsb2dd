@@ -258,7 +258,7 @@ app.get('/api/synthetic-detections', async (req, res) => {
   const [rxLat, rxLon, rxAlt] = rxParams;
   const [txLat, txLon, txAlt] = txParams;
 
-  // Validate server URL (reuse logic from /api/dd)
+  // Validate server URL (same as /api/dd)
   let serverUrl;
   try {
     serverUrl = new URL(server);
@@ -273,6 +273,82 @@ app.get('/api/synthetic-detections', async (req, res) => {
   }
 
   const isAdsbLol = serverUrl.hostname === 'api.adsb.lol';
+
+  if (isAdsbLol) {
+    if (server !== 'https://api.adsb.lol' || serverUrl.protocol !== 'https:') {
+      return res.status(400).json({ error: 'Invalid adsb.lol URL' });
+    }
+  }
+
+  if (!isAdsbLol) {
+    const hostname = serverUrl.hostname;
+
+    const privateIPv4Ranges = [
+      /^127\./,
+      /^10\./,
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+      /^192\.168\./,
+      /^169\.254\./,
+      /^0\.0\.0\.0$/,
+      /localhost/i
+    ];
+
+    const privateIPv6Ranges = [
+      /^::1$/,
+      /^::$/,
+      /^fe80:/i,
+      /^fc00:/i,
+      /^fd00:/i,
+      /^ff00:/i,
+    ];
+
+    if (/^::ffff:/i.test(hostname)) {
+      const ipv4Part = hostname.replace(/^::ffff:/i, '');
+      if (privateIPv4Ranges.some(range => range.test(ipv4Part))) {
+        return res.status(400).json({ error: 'Server URL points to private network' });
+      }
+    }
+
+    if (privateIPv4Ranges.some(range => range.test(hostname))) {
+      return res.status(400).json({ error: 'Server URL points to private network' });
+    }
+
+    if (privateIPv6Ranges.some(range => range.test(hostname))) {
+      return res.status(400).json({ error: 'Server URL points to private network' });
+    }
+
+    if (/^(0x[0-9a-f]+|\d+|0[0-7]+)$/i.test(hostname)) {
+      return res.status(400).json({ error: 'Server URL uses invalid IP format' });
+    }
+
+    if (!/^[\d.:]+$/.test(hostname)) {
+      try {
+        const resolutions = await Promise.allSettled([
+          resolve4(hostname),
+          resolve6(hostname)
+        ]);
+
+        const resolvedIPs = [];
+        for (const result of resolutions) {
+          if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+            resolvedIPs.push(...result.value);
+          }
+        }
+
+        if (resolvedIPs.length === 0) {
+          return res.status(400).json({ error: 'Unable to resolve server hostname' });
+        }
+
+        for (const ip of resolvedIPs) {
+          if (isPrivateIP(ip)) {
+            return res.status(400).json({ error: 'Server hostname resolves to private network' });
+          }
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Unable to resolve server hostname' });
+      }
+    }
+  }
 
   // Initialize RNG
   const rng = new SyntheticRNG(syntheticConfig.seed);
@@ -326,31 +402,36 @@ app.get('/api/synthetic-detections', async (req, res) => {
         continue;
       }
 
-      const hexCode = aircraft.hex;
-      const tar = lla2ecef(aircraft['lat'], aircraft['lon'],
-                          ft2m(aircraft['alt_geom']));
+      try {
+        const hexCode = aircraft.hex;
+        const tar = lla2ecef(aircraft['lat'], aircraft['lon'],
+                            ft2m(aircraft['alt_geom']));
 
-      const dRxTar = norm([ecefRx.x - tar.x, ecefRx.y - tar.y,
-                          ecefRx.z - tar.z]);
-      const dTxTar = norm([ecefTx.x - tar.x, ecefTx.y - tar.y,
-                          ecefTx.z - tar.z]);
-      const delay = (dRxTar + dTxTar - dRxTx) / 1000;  // Convert to km
+        const dRxTar = norm([ecefRx.x - tar.x, ecefRx.y - tar.y,
+                            ecefRx.z - tar.z]);
+        const dTxTar = norm([ecefTx.x - tar.x, ecefTx.y - tar.y,
+                            ecefTx.z - tar.z]);
+        const delay = (dRxTar + dTxTar - dRxTx) / 1000;
 
-      const doppler = calculateDopplerFromVelocity(
-        aircraft, tar, ecefRx, ecefTx, dRxTar, dTxTar, fc
-      );
+        const doppler = calculateDopplerFromVelocity(
+          aircraft, tar, ecefRx, ecefTx, dRxTar, dTxTar, fc
+        );
 
-      if (doppler !== null) {
-        aircraftDict[hexCode] = {
-          delay: delay,
-          doppler: doppler,
-          flight: aircraft.flight,
-          lat: aircraft.lat,
-          lon: aircraft.lon,
-          alt_baro: aircraft.alt_baro || aircraft.alt_geom,
-          gs: aircraft.gs,
-          track: aircraft.track
-        };
+        if (doppler !== null) {
+          aircraftDict[hexCode] = {
+            delay: delay,
+            doppler: doppler,
+            flight: aircraft.flight,
+            lat: aircraft.lat,
+            lon: aircraft.lon,
+            alt_baro: aircraft.alt_baro || aircraft.alt_geom,
+            gs: aircraft.gs,
+            track: aircraft.track
+          };
+        }
+      } catch (err) {
+        console.error(`Error computing delay-Doppler for aircraft ${aircraft.hex}:`, err.message);
+        continue;
       }
     }
 

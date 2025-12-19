@@ -67,47 +67,67 @@ export const DEFAULT_SYNTHETIC_CONFIG = {
   doppler_max: 200            // Max Doppler for false alarms (Hz)
 };
 
+export const MAX_FRAMES = 1000;
+export const MAX_DURATION_SECONDS = 300;
+
 /// @brief Parse synthetic configuration from query parameters
 /// @param query Express query object
 /// @return Configuration object with defaults applied
 export function parseSyntheticConfig(query) {
   const config = { ...DEFAULT_SYNTHETIC_CONFIG };
 
+  const parseAndValidate = (value, type = 'float') => {
+    const parsed = type === 'int' ? parseInt(value) : parseFloat(value);
+    return isNaN(parsed) ? null : parsed;
+  };
+
   if (query.noise_delay !== undefined) {
-    config.noise_delay = parseFloat(query.noise_delay);
+    const val = parseAndValidate(query.noise_delay);
+    if (val !== null) config.noise_delay = val;
   }
   if (query.noise_doppler !== undefined) {
-    config.noise_doppler = parseFloat(query.noise_doppler);
+    const val = parseAndValidate(query.noise_doppler);
+    if (val !== null) config.noise_doppler = val;
   }
   if (query.snr_min !== undefined) {
-    config.snr_min = parseFloat(query.snr_min);
+    const val = parseAndValidate(query.snr_min);
+    if (val !== null) config.snr_min = val;
   }
   if (query.snr_max !== undefined) {
-    config.snr_max = parseFloat(query.snr_max);
+    const val = parseAndValidate(query.snr_max);
+    if (val !== null) config.snr_max = val;
   }
   if (query.detection_prob !== undefined) {
-    config.detection_prob = parseFloat(query.detection_prob);
+    const val = parseAndValidate(query.detection_prob);
+    if (val !== null) config.detection_prob = val;
   }
   if (query.false_alarm_rate !== undefined) {
-    config.false_alarm_rate = parseFloat(query.false_alarm_rate);
+    const val = parseAndValidate(query.false_alarm_rate);
+    if (val !== null) config.false_alarm_rate = val;
   }
   if (query.frame_interval !== undefined) {
-    config.frame_interval = parseInt(query.frame_interval);
+    const val = parseAndValidate(query.frame_interval, 'int');
+    if (val !== null) config.frame_interval = val;
   }
   if (query.duration !== undefined) {
-    config.duration = parseFloat(query.duration);
+    const val = parseAndValidate(query.duration);
+    if (val !== null) config.duration = val;
   }
   if (query.delay_min !== undefined) {
-    config.delay_min = parseFloat(query.delay_min);
+    const val = parseAndValidate(query.delay_min);
+    if (val !== null) config.delay_min = val;
   }
   if (query.delay_max !== undefined) {
-    config.delay_max = parseFloat(query.delay_max);
+    const val = parseAndValidate(query.delay_max);
+    if (val !== null) config.delay_max = val;
   }
   if (query.doppler_min !== undefined) {
-    config.doppler_min = parseFloat(query.doppler_min);
+    const val = parseAndValidate(query.doppler_min);
+    if (val !== null) config.doppler_min = val;
   }
   if (query.doppler_max !== undefined) {
-    config.doppler_max = parseFloat(query.doppler_max);
+    const val = parseAndValidate(query.doppler_max);
+    if (val !== null) config.doppler_max = val;
   }
   if (query.seed !== undefined) {
     config.seed = query.seed;
@@ -143,11 +163,19 @@ export function validateSyntheticConfig(config) {
   if (config.duration <= 0) {
     errors.push('duration must be positive');
   }
+  if (config.duration > MAX_DURATION_SECONDS) {
+    errors.push(`duration must be <= ${MAX_DURATION_SECONDS} seconds`);
+  }
   if (config.delay_min >= config.delay_max) {
     errors.push('delay_min must be < delay_max');
   }
   if (config.doppler_min >= config.doppler_max) {
     errors.push('doppler_min must be < doppler_max');
+  }
+
+  const nFrames = Math.ceil((config.duration * 1000) / config.frame_interval);
+  if (nFrames > MAX_FRAMES) {
+    errors.push(`Requested ${nFrames} frames exceeds maximum of ${MAX_FRAMES}`);
   }
 
   return {
