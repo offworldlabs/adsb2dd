@@ -488,7 +488,8 @@ app.get('/api/synthetic-detections', async (req, res) => {
   return res.json(frames);
 });
 
-const host = process.env.HOST || '0.0.0.0';
+// Use '::' for IPv6 dual-stack to support mDNS .local access from IPv6 clients
+const host = process.env.HOST || '::';
 app.listen(port, host, () => {
   console.log(`Server is running at http://${host}:${port}`);
 });
