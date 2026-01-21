@@ -46,6 +46,26 @@ sudo docker compose up -d
 
 The API front-end is available at [http://localhost:49155](http://localhost:49155).
 
+## Configuration
+
+### Environment Variables
+
+- `PORT`: Port number for the API server (default: 49155)
+- `ALLOW_PRIVATE_NETWORKS`: Allow tar1090 servers on private networks (default: false)
+
+By default, adsb2dd includes SSRF (Server-Side Request Forgery) protection that blocks requests to private network addresses (10.x.x.x, 172.16-31.x.x, 192.168.x.x, localhost, etc.). This is a security feature to prevent the service from being used to scan internal networks.
+
+For trusted deployments where you need to fetch from a local tar1090 server on a private network, set `ALLOW_PRIVATE_NETWORKS=true` in your docker-compose.yml:
+
+```yaml
+services:
+  adsb2dd:
+    environment:
+      - ALLOW_PRIVATE_NETWORKS=true
+```
+
+**Security Note:** Only enable this setting if you trust all users who can access your adsb2dd instance. When enabled, the service can be used to make requests to any private network address.
+
 ## Method of Operation
 
 The delay-Doppler data is computed as follows:

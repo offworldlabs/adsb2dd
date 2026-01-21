@@ -8,3 +8,5 @@ services:
     image: adsb2dd
     network_mode: host
     container_name: adsb2dd
+    environment:
+      - ALLOW_PRIVATE_NETWORKS=false

@@ -17,6 +17,7 @@ const resolve6 = promisify(dns.resolve6);
 const app = express();
 app.use(cors());
 const port = process.env.PORT || 49155;
+const allowPrivateNetworks = process.env.ALLOW_PRIVATE_NETWORKS === 'true';
 
 var dict = {};
 const tUpdate = 1000;
@@ -110,7 +111,7 @@ app.get('/api/dd', async (req, res) => {
     }
   }
 
-  if (!isAdsbLol) {
+  if (!isAdsbLol && !allowPrivateNetworks) {
     const hostname = serverUrl.hostname;
 
     const privateIPv4Ranges = [
@@ -280,7 +281,7 @@ app.get('/api/synthetic-detections', async (req, res) => {
     }
   }
 
-  if (!isAdsbLol) {
+  if (!isAdsbLol && !allowPrivateNetworks) {
     const hostname = serverUrl.hostname;
 
     const privateIPv4Ranges = [
