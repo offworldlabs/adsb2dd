@@ -1,7 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import dns from 'dns';
-import { promisify } from 'util';
 
 import {checkTar1090, getTar1090} from './node/tar1090.js';
 import {checkAdsbLol, getAdsbLol} from './node/adsblol.js';
@@ -10,9 +8,6 @@ import {isValidNumber} from './node/validate.js';
 import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
 import {SyntheticRNG, parseSyntheticConfig, validateSyntheticConfig,
         generateSyntheticFrame, convertToFrameFormat} from './node/synthetic.js';
-
-const resolve4 = promisify(dns.resolve4);
-const resolve6 = promisify(dns.resolve6);
 
 const app = express();
 app.use(cors());
@@ -29,46 +24,6 @@ const nDopplerSmooth = 10;
 const adsbLolRadius = 40;
 
 app.use(express.static('public'));
-
-/// @brief Check if an IP address is in a private or reserved range
-/// @param ip IP address string (IPv4 or IPv6)
-/// @return True if IP is private/reserved
-function isPrivateIP(ip) {
-  const ipv4PrivateRanges = [
-    /^127\./,
-    /^10\./,
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-    /^192\.168\./,
-    /^169\.254\./,
-    /^0\.0\.0\.0$/,
-  ];
-
-  const ipv6PrivateRanges = [
-    /^::1$/,
-    /^fe80:/i,
-    /^fc00:/i,
-    /^fd00:/i,
-    /^ff00:/i,
-    /^::ffff:/i,
-  ];
-
-  if (ipv4PrivateRanges.some(range => range.test(ip))) {
-    return true;
-  }
-
-  if (ipv6PrivateRanges.some(range => range.test(ip))) {
-    return true;
-  }
-
-  if (/^::ffff:/i.test(ip)) {
-    const ipv4Part = ip.replace(/^::ffff:/i, '');
-    if (ipv4PrivateRanges.some(range => range.test(ipv4Part))) {
-      return true;
-    }
-  }
-
-  return false;
-}
 
 app.get('/api/dd', async (req, res) => {
 
