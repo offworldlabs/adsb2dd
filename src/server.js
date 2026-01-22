@@ -1,7 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import dns from 'dns';
-import { promisify } from 'util';
 
 import {checkTar1090, getTar1090} from './node/tar1090.js';
 import {checkAdsbLol, getAdsbLol} from './node/adsblol.js';
@@ -10,9 +8,6 @@ import {isValidNumber} from './node/validate.js';
 import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
 import {SyntheticRNG, parseSyntheticConfig, validateSyntheticConfig,
         generateSyntheticFrame, convertToFrameFormat} from './node/synthetic.js';
-
-const resolve4 = promisify(dns.resolve4);
-const resolve6 = promisify(dns.resolve6);
 
 const app = express();
 app.use(cors());
@@ -29,46 +24,6 @@ const nDopplerSmooth = 10;
 const adsbLolRadius = 40;
 
 app.use(express.static('public'));
-
-/// @brief Check if an IP address is in a private or reserved range
-/// @param ip IP address string (IPv4 or IPv6)
-/// @return True if IP is private/reserved
-function isPrivateIP(ip) {
-  const ipv4PrivateRanges = [
-    /^127\./,
-    /^10\./,
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-    /^192\.168\./,
-    /^169\.254\./,
-    /^0\.0\.0\.0$/,
-  ];
-
-  const ipv6PrivateRanges = [
-    /^::1$/,
-    /^fe80:/i,
-    /^fc00:/i,
-    /^fd00:/i,
-    /^ff00:/i,
-    /^::ffff:/i,
-  ];
-
-  if (ipv4PrivateRanges.some(range => range.test(ip))) {
-    return true;
-  }
-
-  if (ipv6PrivateRanges.some(range => range.test(ip))) {
-    return true;
-  }
-
-  if (/^::ffff:/i.test(ip)) {
-    const ipv4Part = ip.replace(/^::ffff:/i, '');
-    if (ipv4PrivateRanges.some(range => range.test(ipv4Part))) {
-      return true;
-    }
-  }
-
-  return false;
-}
 
 app.get('/api/dd', async (req, res) => {
 
@@ -110,75 +65,6 @@ app.get('/api/dd', async (req, res) => {
     }
   }
 
-  if (!isAdsbLol) {
-    const hostname = serverUrl.hostname;
-
-    const privateIPv4Ranges = [
-      /^127\./,
-      /^10\./,
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-      /^192\.168\./,
-      /^169\.254\./,
-      /^0\.0\.0\.0$/,
-      /localhost/i
-    ];
-
-    const privateIPv6Ranges = [
-      /^::1$/,
-      /^::$/,
-      /^fe80:/i,
-      /^fc00:/i,
-      /^fd00:/i,
-      /^ff00:/i,
-    ];
-
-    if (/^::ffff:/i.test(hostname)) {
-      const ipv4Part = hostname.replace(/^::ffff:/i, '');
-      if (privateIPv4Ranges.some(range => range.test(ipv4Part))) {
-        return res.status(400).json({ error: 'Server URL points to private network' });
-      }
-    }
-
-    if (privateIPv4Ranges.some(range => range.test(hostname))) {
-      return res.status(400).json({ error: 'Server URL points to private network' });
-    }
-
-    if (privateIPv6Ranges.some(range => range.test(hostname))) {
-      return res.status(400).json({ error: 'Server URL points to private network' });
-    }
-
-    if (/^(0x[0-9a-f]+|\d+|0[0-7]+)$/i.test(hostname)) {
-      return res.status(400).json({ error: 'Server URL uses invalid IP format' });
-    }
-
-    if (!/^[\d.:]+$/.test(hostname)) {
-      try {
-        const resolutions = await Promise.allSettled([
-          resolve4(hostname),
-          resolve6(hostname)
-        ]);
-
-        const resolvedIPs = [];
-        for (const result of resolutions) {
-          if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-            resolvedIPs.push(...result.value);
-          }
-        }
-
-        if (resolvedIPs.length === 0) {
-          return res.status(400).json({ error: 'Unable to resolve server hostname' });
-        }
-
-        for (const ip of resolvedIPs) {
-          if (isPrivateIP(ip)) {
-            return res.status(400).json({ error: 'Server hostname resolves to private network' });
-          }
-        }
-      } catch (error) {
-        return res.status(400).json({ error: 'Unable to resolve server hostname' });
-      }
-    }
-  }
   let isServerValid;
   let midLat, midLon;
 
@@ -277,76 +163,6 @@ app.get('/api/synthetic-detections', async (req, res) => {
   if (isAdsbLol) {
     if (server !== 'https://api.adsb.lol' || serverUrl.protocol !== 'https:') {
       return res.status(400).json({ error: 'Invalid adsb.lol URL' });
-    }
-  }
-
-  if (!isAdsbLol) {
-    const hostname = serverUrl.hostname;
-
-    const privateIPv4Ranges = [
-      /^127\./,
-      /^10\./,
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-      /^192\.168\./,
-      /^169\.254\./,
-      /^0\.0\.0\.0$/,
-      /localhost/i
-    ];
-
-    const privateIPv6Ranges = [
-      /^::1$/,
-      /^::$/,
-      /^fe80:/i,
-      /^fc00:/i,
-      /^fd00:/i,
-      /^ff00:/i,
-    ];
-
-    if (/^::ffff:/i.test(hostname)) {
-      const ipv4Part = hostname.replace(/^::ffff:/i, '');
-      if (privateIPv4Ranges.some(range => range.test(ipv4Part))) {
-        return res.status(400).json({ error: 'Server URL points to private network' });
-      }
-    }
-
-    if (privateIPv4Ranges.some(range => range.test(hostname))) {
-      return res.status(400).json({ error: 'Server URL points to private network' });
-    }
-
-    if (privateIPv6Ranges.some(range => range.test(hostname))) {
-      return res.status(400).json({ error: 'Server URL points to private network' });
-    }
-
-    if (/^(0x[0-9a-f]+|\d+|0[0-7]+)$/i.test(hostname)) {
-      return res.status(400).json({ error: 'Server URL uses invalid IP format' });
-    }
-
-    if (!/^[\d.:]+$/.test(hostname)) {
-      try {
-        const resolutions = await Promise.allSettled([
-          resolve4(hostname),
-          resolve6(hostname)
-        ]);
-
-        const resolvedIPs = [];
-        for (const result of resolutions) {
-          if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-            resolvedIPs.push(...result.value);
-          }
-        }
-
-        if (resolvedIPs.length === 0) {
-          return res.status(400).json({ error: 'Unable to resolve server hostname' });
-        }
-
-        for (const ip of resolvedIPs) {
-          if (isPrivateIP(ip)) {
-            return res.status(400).json({ error: 'Server hostname resolves to private network' });
-          }
-        }
-      } catch (error) {
-        return res.status(400).json({ error: 'Unable to resolve server hostname' });
-      }
     }
   }
 

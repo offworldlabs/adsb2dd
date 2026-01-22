@@ -46,6 +46,33 @@ sudo docker compose up -d
 
 The API front-end is available at [http://localhost:49155](http://localhost:49155).
 
+## Security Considerations
+
+**SSRF (Server-Side Request Forgery) Risk:** This service accepts user-provided URLs via the `server` parameter and makes HTTP requests to those URLs. This implementation does not include SSRF protection for simplicity in internal trusted network deployments.
+
+### Potential Attack Vectors
+
+If this service is exposed to untrusted users or networks, attackers could potentially:
+
+- **Access cloud metadata services** (e.g., AWS at 169.254.169.254) to steal credentials
+- **Scan internal networks** to discover internal services and infrastructure
+- **Access internal services** that are not internet-facing
+- **Bypass firewall rules** by using this service as a proxy
+
+### Recommendations
+
+1. **Deploy only on trusted internal networks** - Do not expose this service to the public internet
+2. **Implement network segmentation** - Limit what networks this service can reach
+3. **Add authentication** - Require authentication for API access if needed
+4. **Monitor for abuse** - Log and review access patterns
+5. **Security audit** - Conduct a security audit before production deployment
+
+For production deployments requiring public access, consider implementing:
+- Private network IP blocking (10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x, 169.254.x.x)
+- DNS resolution validation
+- Request rate limiting
+- URL allowlisting
+
 ## Method of Operation
 
 The delay-Doppler data is computed as follows:
