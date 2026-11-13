@@ -72,7 +72,7 @@ sudo docker logs adsb2dd
 - Requires tar1090 server for ADS-B data source
 - Uses host networking for direct network access
 - Node.js Express application
-- MIT licensed open source project
+- AGPL-3.0 licensed open source project (upstream 30hours code remains MIT; see LICENSE-MIT)
 - Automatic cleanup of inactive input sets after 10 minutes
 
 ## Integration Example
